@@ -1,0 +1,29 @@
+# Secrets & donnees locales (specifiques a chaque poste)
+.env
+config.json
+projects_history.json
+
+# Base de donnees locale (buffer hors-ligne)
+*.db
+*.db-wal
+*.db-shm
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# PyInstaller (LCSify.spec est versionne, necessaire au build)
+build/
+dist/
+
+# Outils / OS
+.ruff_cache/
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

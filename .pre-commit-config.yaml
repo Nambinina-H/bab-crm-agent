@@ -1,0 +1,32 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.2.0
+    hooks:
+      - id: trailing-whitespace
+        name: "✂️ Remove trailing whitespace"
+      - id: end-of-file-fixer
+        name: "📄 Ensure newline at end of file"
+      - id: check-yaml
+        name: "🧾 YAML syntax check"
+      - id: check-added-large-files
+        name: "🧱 Prevent large files from being committed"
+      - id: check-merge-conflict
+        name: "⚔️ Detect merge conflicts"
+
+  - repo: https://github.com/asottile/reorder-python-imports
+    rev: v3.15.0
+    hooks:
+      - id: reorder-python-imports
+        name: "📦 Reorder Python imports"
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.2
+    hooks:
+      - id: gitleaks
+        name: "🔐 Gitleaks · Detect secrets in code"
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.1
+    hooks:
+      - id: ruff-check
+        name: "🧹 Ruff · Linting and formatting"
