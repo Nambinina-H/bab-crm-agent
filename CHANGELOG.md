@@ -14,5 +14,6 @@
 - **Mise a jour automatique** via les Releases GitHub (telechargement en arriere-plan,
   installation au prochain demarrage ; la config du poste est conservee).
 - **Timer flottant** verrouille en haut a droite de l'ecran (toujours visible
-  jusqu'a la fermeture de l'app).
-- Marque **BAB CRM** (nom de fenetre + logo).
+  jusqu'a la fermeture de l'app) ; le chrono n'est plus dans la fenetre, il vit
+  uniquement dans ce bandeau.
+- Application **BABCRM - agent** (nom de l'.exe + de la fenetre) ; logo BAB CRM.

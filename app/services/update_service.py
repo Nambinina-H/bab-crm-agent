@@ -46,7 +46,7 @@ def _version_tuple(value):
 
 
 def _paths():
-    exe = sys.executable                       # ...\LCSify.exe
+    exe = sys.executable                       # l'.exe de l'agent en cours
     folder = os.path.dirname(exe)
     return exe, folder, os.path.join(folder, _STAGED_NAME)
 

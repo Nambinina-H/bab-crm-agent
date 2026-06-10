@@ -71,7 +71,7 @@ class AppWindow:
         self._pending_assigned = None
 
         self.root = tk.Tk()
-        self.root.title("BAB CRM")
+        self.root.title("BABCRM - agent")
         self.root.geometry("380x500")
         self.root.resizable(False, False)  # taille fixe
         self.root.protocol("WM_DELETE_WINDOW", self._handle_close)
@@ -155,11 +155,11 @@ class AppWindow:
         for var in (self.client_var, self.video_var, self.version_var):
             var.trace_add("write", self._on_context_change)
 
+        # Le chrono n'est plus dans la fenetre : il vit dans le bandeau flottant
+        # (haut a droite de l'ecran). On garde juste l'etat ici.
         self.status_var = tk.StringVar(value="Arrete")
         ttk.Label(f, textvariable=self.status_var,
-                  font=("Segoe UI", 15, "bold")).pack(pady=(14, 2))
-        self.timer_var = tk.StringVar(value="00:00:00")
-        ttk.Label(f, textvariable=self.timer_var, font=("Segoe UI", 13)).pack()
+                  font=("Segoe UI", 15, "bold")).pack(pady=(14, 6))
 
         btns = ttk.Frame(f)
         btns.pack(pady=14)
@@ -581,7 +581,6 @@ class AppWindow:
         mode = self.controller.snapshot()["mode"]
         seconds = self._displayed_seconds()
         self.status_var.set(_STATUS[mode])
-        self.timer_var.set(_fmt(seconds))
         self._update_remaining(seconds)
         self._update_floating(mode, seconds)
 

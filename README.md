@@ -110,33 +110,23 @@ python -m app.main
 ### Un .exe autonome (PyInstaller)
 
 Pour ne rien installer sur les postes, fabrique un executable unique (une fois,
-sur une machine Windows) :
+sur une machine Windows), depuis le dossier `agent/` :
 
 ```bash
-pip install pyinstaller
-
-# 1) (une fois) generer l'icone .ico multi-tailles depuis le logo, ex. avec
-#    ImageMagick (ou un convertisseur PNG -> ICO en ligne) :
-magick assets\logo.png -define icon:auto-resize=256,48,32,16 assets\lcsify.ico
-
-# 2) builder depuis le dossier agent/ :
-#    --paths .             resout les imports "app.*"
-#    --icon                icone du .exe
-#    --add-data            embarque le logo affiche dans la fenetre
-pyinstaller --onefile --noconsole --name LCSify --paths . ^
-  --icon assets\lcsify.ico --add-data "assets;assets" app\main.py
+pip install -r requirements.txt        # inclut pyinstaller
+pyinstaller --noconfirm agent.spec
 ```
 
-Tu obtiens `dist/LCSify.exe`. Copie-le sur chaque poste **avec** son
-`.env` et son `config.json` dans le meme dossier (le logo, lui, est deja
-embarque dans le `.exe`).
+Tu obtiens **`dist/BABCRM - agent.exe`**. Copie-le sur chaque poste **avec** son
+`.env` et son `config.json` dans le meme dossier (le logo est deja embarque
+dans l'.exe).
 
 ### Demarrage automatique a l'ouverture de session
 
 Via le Planificateur de taches Windows (en admin) :
 
 ```bat
-schtasks /create /tn "LCSify" /tr "C:\LCSify\LCSify.exe" ^
+schtasks /create /tn "BABCRM - agent" /tr "\"C:\BABCRM\BABCRM - agent.exe\"" ^
   /sc onlogon /rl highest /f
 ```
 
@@ -174,9 +164,9 @@ jamais remplaces — seul le binaire l'est).
 
 **Publier une nouvelle version (ce que TU fais)**
 1. Incrementer la version dans [`app/version.py`](app/version.py) (ex. `1.0.1`).
-2. Builder l'`.exe` : `pyinstaller --noconfirm LCSify.spec` -> `dist/LCSify.exe`.
+2. Builder l'`.exe` : `pyinstaller --noconfirm agent.spec` -> `dist/BABCRM - agent.exe`.
 3. Sur GitHub, creer une **Release** avec le tag **`v1.0.1`** (= la version) et
-   y **joindre `dist/LCSify.exe`** en asset.
+   y **joindre `dist/BABCRM - agent.exe`** en asset.
 4. C'est tout : les agents detecteront `v1.0.1 > 1.0.x` et se mettront a jour.
 
 > Le tag doit etre **superieur** a la version installee pour declencher la MAJ.
