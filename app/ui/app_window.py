@@ -28,6 +28,12 @@ _STATUS = {
     SessionMode.PAUSED: "En pause",
 }
 
+_STATE_COLORS = {
+    SessionMode.STOPPED: "#9ca3af",
+    SessionMode.RUNNING: "#22c55e",
+    SessionMode.PAUSED: "#f59e0b",
+}
+
 _REMAINING_SIZE = 10  # taille de base du "temps restant" (px de police)
 _REMAINING_FONT = ("Segoe UI", _REMAINING_SIZE, "bold")
 # Battement du depassement : cycle discret en 3 etapes (11 -> 10 -> 11),
@@ -75,6 +81,7 @@ class AppWindow:
         self._build_menu()
         self._build_main_page()
         self._build_settings_page()
+        self._build_floating_timer()
 
         self._update_who()
         self._refresh()
@@ -319,7 +326,7 @@ class AppWindow:
         try:
             self._icon_img = tk.PhotoImage(file=LOGO_PNG)
             self.root.iconphoto(True, self._icon_img)
-            self._logo_img = self._icon_img.subsample(6, 6)  # logo large ~85x46 px
+            self._logo_img = self._icon_img.subsample(4, 4)  # logo large ~128x70 px
         except Exception:
             pass
 
@@ -340,6 +347,45 @@ class AppWindow:
             user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP)
         except Exception:
             pass
+
+    # --- timer flottant (overlay verrouille, haut a droite de l'ecran) ---
+
+    def _build_floating_timer(self):
+        """Petit bandeau chrono toujours au-dessus, ancre en haut a droite de
+        l'ecran. Verrouille : pas de deplacement ni de fermeture ; visible
+        jusqu'a la fermeture de l'application (detruit avec la fenetre)."""
+        win = tk.Toplevel(self.root)
+        win.overrideredirect(True)        # pas de barre de titre
+        win.attributes("-topmost", True)  # au-dessus de tout
+        try:
+            win.attributes("-alpha", 0.95)
+        except Exception:
+            pass
+
+        bg = "#111827"
+        frame = tk.Frame(win, bg=bg, padx=12, pady=7, highlightthickness=1,
+                         highlightbackground="#374151")
+        frame.pack()
+        self._float_dot = tk.Label(frame, text="●", fg="#9ca3af", bg=bg,
+                                   font=("Segoe UI", 11))
+        self._float_dot.pack(side="left", padx=(0, 6))
+        self._float_status = tk.Label(frame, text="Arrete", fg="#e5e7eb", bg=bg,
+                                      font=("Segoe UI", 9))
+        self._float_status.pack(side="left", padx=(0, 8))
+        self._float_time = tk.Label(frame, text="00:00:00", fg="#ffffff", bg=bg,
+                                    font=("Segoe UI", 12, "bold"))
+        self._float_time.pack(side="left")
+
+        # Position fixe : coin haut droit de l'ecran (verrouille).
+        win.update_idletasks()
+        sw = win.winfo_screenwidth()
+        win.geometry(f"+{sw - win.winfo_width() - 16}+16")
+        self.floating = win
+
+    def _update_floating(self, mode, seconds):
+        self._float_dot.config(fg=_STATE_COLORS[mode])
+        self._float_status.config(text=_STATUS[mode])
+        self._float_time.config(text=_fmt(seconds))
 
     # --- configuration (nom du monteur) ---
 
@@ -537,6 +583,7 @@ class AppWindow:
         self.status_var.set(_STATUS[mode])
         self.timer_var.set(_fmt(seconds))
         self._update_remaining(seconds)
+        self._update_floating(mode, seconds)
 
         running = mode == SessionMode.RUNNING
         stopped = mode == SessionMode.STOPPED
