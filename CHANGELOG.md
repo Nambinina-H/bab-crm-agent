@@ -17,3 +17,6 @@
   jusqu'a la fermeture de l'app) ; le chrono n'est plus dans la fenetre, il vit
   uniquement dans ce bandeau.
 - Application **BABCRM - agent** (nom de l'.exe + de la fenetre) ; logo BAB CRM.
+- **Heure d'activite fiable** : l'agent transmet son heure UTC a l'envoi
+  (`client_sent_at`) pour que le serveur recale ses horodatages si l'horloge du
+  poste est decalee (les heures ne dependent plus de l'horloge du PC).

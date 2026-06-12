@@ -6,6 +6,7 @@ from app.core.logging import log
 from app.services.config_service import pull_remote_config
 from app.services.register_service import register_employee
 from app.services.storage_service import fetch_unsynced, mark_synced, open_connection
+from app.utils.time_utils import now_utc_iso
 
 
 class Syncer(threading.Thread):
@@ -51,7 +52,9 @@ class Syncer(threading.Thread):
 
         resp = requests.post(
             self.cfg["server_url"].rstrip("/") + "/api/events",
-            json={"events": events},
+            # client_sent_at : heure UTC de l'agent a l'envoi -> le serveur
+            # recale les horodatages si l'horloge du poste est decalee.
+            json={"events": events, "client_sent_at": now_utc_iso()},
             headers={"X-API-Key": self.cfg["api_key"]},
             timeout=15,
         )
