@@ -1,0 +1,42 @@
+name: Build & Release agent
+
+# Déclenché quand on pousse un tag de version, ex. : git tag v1.0.1 && git push --tags
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # nécessaire pour créer la Release
+
+jobs:
+  build-release:
+    runs-on: windows-latest # l'.exe Windows doit être buildé sous Windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Synchronise la version sur le tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"        # v1.0.1 -> 1.0.1
+          sed -i "s/^__version__ = .*/__version__ = \"$VERSION\"/" app/version.py
+          echo "Version buildée :"; cat app/version.py
+
+      - name: Installe les dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build de l'exe (PyInstaller)
+        run: pyinstaller agent.spec --noconfirm --clean
+
+      - name: Publie la Release (avec l'.exe en asset)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "dist/BABCRM - agent.exe"
+          generate_release_notes: true
+          fail_on_unmatched_files: true

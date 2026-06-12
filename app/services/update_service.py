@@ -90,6 +90,15 @@ def apply_pending_update():
     os._exit(0)  # libere l'.exe : le script peut le remplacer puis relancer
 
 
+def is_update_ready() -> bool:
+    """Vrai si une nouvelle version a ete telechargee et attend l'installation
+    (au prochain redemarrage). Sert a notifier l'utilisateur dans l'UI."""
+    if not _is_frozen():
+        return False
+    _, _, staged = _paths()
+    return os.path.exists(staged) and os.path.getsize(staged) >= _MIN_EXE_SIZE
+
+
 def check_and_download():
     """Best-effort : telecharge la derniere version si plus recente. Le swap se
     fera au prochain demarrage (apply_pending_update). Sans effet en dev."""
@@ -131,15 +140,15 @@ def check_and_download():
         log(f"Verification de mise a jour: {exc}")
 
 
-def start_background_checker(interval_hours=6):
-    """Verifie maintenant puis toutes les `interval_hours` (thread daemon)."""
+def start_background_checker(interval_minutes=30):
+    """Verifie maintenant puis toutes les `interval_minutes` (thread daemon)."""
     if not _is_frozen():
         return
 
     def loop():
         while True:
             check_and_download()
-            time.sleep(interval_hours * 3600)
+            time.sleep(max(5, interval_minutes) * 60)
 
     threading.Thread(target=loop, daemon=True).start()
 

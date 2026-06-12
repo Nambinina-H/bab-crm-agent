@@ -12,6 +12,7 @@ from app.core.logging import log
 from app.services.assigned_projects_service import fetch_assigned_projects
 from app.services.register_service import register_employee
 from app.services import storage_service
+from app.services.update_service import apply_pending_update, is_update_ready
 from app.settings.paths import LOGO_PNG
 from app.settings.settings import save_config
 from app.version import __version__
@@ -68,6 +69,7 @@ class AppWindow:
         # Projets assignes recus en arriere-plan (thread reseau) -> appliques
         # par la boucle UI. None = rien en attente.
         self._pending_assigned = None
+        self._update_notified = False  # notif "nouvelle version" deja affichee ?
 
         self.root = tk.Tk()
         self.root.title("BABCRM - agent")
@@ -78,6 +80,10 @@ class AppWindow:
         self._set_window_icon()
         self._remove_maximize_button()
         self._build_menu()
+        self._build_notification()  # barre de notif (en haut, masquee par defaut)
+        # Corps : les pages vivent ici, sous la barre de notification.
+        self._body = ttk.Frame(self.root)
+        self._body.pack(fill="both", expand=True)
         self._build_main_page()
         self._build_settings_page()
         self._build_floating_timer()
@@ -101,6 +107,56 @@ class AppWindow:
         menubar.add_command(label="Paramètres", command=self._show_settings)
         self.root.config(menu=menubar)
 
+    # --- bandeau de notification (reutilisable) ---
+
+    def _build_notification(self):
+        """Bandeau bleu en haut de la fenetre : message + action + fermeture.
+        Masque par defaut ; affiche via _show_notification()."""
+        self._notif_action_cb = None
+        bar = tk.Frame(self.root, bg="#1d4ed8")
+        self._notif_bar = bar
+        self._notif_label = tk.Label(
+            bar, bg="#1d4ed8", fg="white", font=("Segoe UI", 9),
+            wraplength=230, justify="left", anchor="w",
+        )
+        self._notif_label.pack(side="left", padx=(10, 6), pady=6)
+        tk.Button(
+            bar, text="✕", bd=0, relief="flat", bg="#1d4ed8", fg="white",
+            activebackground="#1d4ed8", activeforeground="white",
+            cursor="hand2", command=self._hide_notification,
+        ).pack(side="right", padx=(0, 8))
+        self._notif_btn = tk.Button(
+            bar, text="", bd=0, relief="flat", bg="white", fg="#1d4ed8",
+            activebackground="#e5e7eb", font=("Segoe UI", 9, "bold"),
+            cursor="hand2", padx=8, command=self._on_notif_action,
+        )  # affiche seulement s'il y a une action
+
+    def _on_notif_action(self):
+        if self._notif_action_cb:
+            self._notif_action_cb()
+
+    def _show_notification(self, message, action_text=None, action_cb=None):
+        self._notif_label.config(text=message)
+        self._notif_action_cb = action_cb
+        if action_text and action_cb:
+            self._notif_btn.config(text=action_text)
+            self._notif_btn.pack(side="right", padx=(0, 4), pady=4)
+        else:
+            self._notif_btn.pack_forget()
+        self._notif_bar.pack(side="top", fill="x", before=self._body)
+
+    def _hide_notification(self):
+        self._notif_bar.pack_forget()
+
+    def _restart_for_update(self):
+        """Applique la mise a jour deja telechargee : ferme proprement puis un
+        script remplace l'.exe et relance l'agent (config conservee)."""
+        try:
+            self.on_close()  # hors-ligne + arret des threads
+        except Exception:
+            pass
+        apply_pending_update()  # ecrit le script de swap puis quitte le process
+
     # --- pages ---
 
     def _show_main(self):
@@ -114,7 +170,7 @@ class AppWindow:
         self.settings_frame.pack(fill="both", expand=True)
 
     def _build_main_page(self):
-        f = ttk.Frame(self.root)
+        f = ttk.Frame(self._body)
         self.main_frame = f
 
         if self._logo_img is not None:
@@ -170,7 +226,7 @@ class AppWindow:
         self.stop_btn.grid(row=0, column=2, padx=4)
 
     def _build_settings_page(self):
-        f = ttk.Frame(self.root)
+        f = ttk.Frame(self._body)
         self.settings_frame = f
 
         ttk.Button(f, text="←", width=3, command=self._leave_settings).pack(
@@ -562,6 +618,15 @@ class AppWindow:
         if self._pending_assigned is not None:
             projects, self._pending_assigned = self._pending_assigned, None
             self._apply_assigned_refresh(projects)
+
+        # Nouvelle version telechargee -> on propose le redemarrage (une fois).
+        if not self._update_notified and is_update_ready():
+            self._update_notified = True
+            self._show_notification(
+                "Une nouvelle version est prête.",
+                action_text="Redémarrer",
+                action_cb=self._restart_for_update,
+            )
 
         mode = self.controller.snapshot()["mode"]
         seconds = self._displayed_seconds()

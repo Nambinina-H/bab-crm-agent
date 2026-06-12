@@ -25,7 +25,6 @@ class HeartbeatSender(threading.Thread):
         self.controller = controller
         self._stop = threading.Event()
         self._wake = threading.Event()
-        self._offline_sent = False
 
     def run(self):
         while not self._stop.is_set():
@@ -45,17 +44,21 @@ class HeartbeatSender(threading.Thread):
         mode = snap["mode"]
 
         if mode == SessionMode.STOPPED:
-            if self._offline_sent:
-                return  # deja signale hors-ligne, on n'inonde pas le serveur
+            # Agent ouvert mais pas en suivi : on reste EN LIGNE (connecté), sans
+            # activite (on vide app/projet pour ne pas afficher quelque chose de
+            # perime). Le hors-ligne n'est envoye qu'a la fermeture (send_offline).
             self._post({
                 "employee_id": self.cfg["employee_id"],
                 "employee_name": snap["name"],
-                "state": "offline",
+                "state": "online",
+                "app": None,
+                "window_title": "",
+                "client": "",
+                "project": "",
+                "version": "",
             })
-            self._offline_sent = True
             return
 
-        self._offline_sent = False
         if mode == SessionMode.PAUSED:
             state, app, title = "paused", None, ""
         else:
@@ -82,7 +85,6 @@ class HeartbeatSender(threading.Thread):
                 "employee_name": self.controller.snapshot()["name"],
                 "state": "offline",
             })
-            self._offline_sent = True
         except Exception as exc:
             log(f"Offline non envoye: {exc}")
 

@@ -42,8 +42,9 @@ def main():
     watcher = ForegroundWatcher(on_change=worker.wake)
     watcher.start()
 
-    # Verifie les mises a jour en arriere-plan (sans interrompre la session).
-    start_background_checker()
+    # Verifie les mises a jour en arriere-plan (sans interrompre la session),
+    # au demarrage puis toutes les 30 min -> MAJ detectee vite.
+    start_background_checker(interval_minutes=30)
 
     log(f"Agent pret (machine {cfg['employee_id']}). Serveur: {cfg['server_url']}")
 
