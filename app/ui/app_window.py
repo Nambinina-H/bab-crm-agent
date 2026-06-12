@@ -34,11 +34,10 @@ _STATE_COLORS = {
     SessionMode.PAUSED: "#f59e0b",
 }
 
-_REMAINING_SIZE = 10  # taille de base du "temps restant" (px de police)
-_REMAINING_FONT = ("Segoe UI", _REMAINING_SIZE, "bold")
-# Battement du depassement : cycle discret en 3 etapes (11 -> 10 -> 11),
-# chaque palier tenu ~0,5 s. Amplitude 1 px (minimum pour une police entiere).
-_PULSE_CYCLE = (_REMAINING_SIZE + 1, _REMAINING_SIZE, _REMAINING_SIZE + 1)
+_FLOAT_SIZE = 12  # taille de base du temps dans le bandeau flottant (px)
+_FLOAT_FONT = ("Segoe UI", _FLOAT_SIZE, "bold")
+# Battement (zoom/dezoom) du temps quand le projet est depasse : cycle 13-12-13.
+_PULSE_CYCLE = (_FLOAT_SIZE + 1, _FLOAT_SIZE, _FLOAT_SIZE + 1)
 _PULSE_HOLD = 6  # frames par palier (80 ms x 6 = ~0,5 s)
 
 _VERSIONS = [f"V{i}" for i in range(1, 11)]
@@ -169,27 +168,6 @@ class AppWindow:
         self.play_btn.grid(row=0, column=0, padx=4)
         self.pause_btn.grid(row=0, column=1, padx=4)
         self.stop_btn.grid(row=0, column=2, padx=4)
-
-        # Temps restant du projet, ancre en haut a droite. Deux labels : le mot
-        # (statique) + l'heure (seule a pulser en zoom/dezoom si depassement).
-        try:
-            frame_bg = ttk.Style().lookup("TFrame", "background")
-        except Exception:
-            frame_bg = None
-        self.remaining_frame = tk.Frame(f)
-        self.remaining_prefix = tk.Label(self.remaining_frame, text="",
-                                         font=_REMAINING_FONT)
-        self.remaining_time = tk.Label(self.remaining_frame, text="",
-                                       font=_REMAINING_FONT)
-        if frame_bg:
-            for wdg in (self.remaining_frame, self.remaining_prefix,
-                        self.remaining_time):
-                wdg.config(bg=frame_bg)
-        # Ancre par la GAUCHE + alignement HAUT : le mot est le point fixe ;
-        # l'heure grandit vers la droite/le bas sans deplacer le mot.
-        self.remaining_prefix.pack(side="left", anchor="n", padx=(0, 4))
-        self.remaining_time.pack(side="left", anchor="n")
-        self.remaining_frame.place(relx=1.0, x=-135, y=8, anchor="nw")
 
     def _build_settings_page(self):
         f = ttk.Frame(self.root)
@@ -373,7 +351,7 @@ class AppWindow:
                                       font=("Segoe UI", 9))
         self._float_status.pack(side="left", padx=(0, 8))
         self._float_time = tk.Label(frame, text="00:00:00", fg="#ffffff", bg=bg,
-                                    font=("Segoe UI", 12, "bold"))
+                                    font=_FLOAT_FONT)
         self._float_time.pack(side="left")
 
         # Position fixe : coin haut droit de l'ecran (verrouille).
@@ -382,10 +360,38 @@ class AppWindow:
         win.geometry(f"+{sw - win.winfo_width() - 16}+16")
         self.floating = win
 
+    def _anchor_floating(self):
+        """Re-cale le bandeau sur le bord droit de l'ecran (sa largeur change
+        selon le texte : 'Restant ...' / 'Depasse ...' / chrono)."""
+        self.floating.update_idletasks()
+        sw = self.floating.winfo_screenwidth()
+        self.floating.geometry(f"+{sw - self.floating.winfo_width() - 16}+16")
+
     def _update_floating(self, mode, seconds):
+        """Affiche le temps RESTANT du projet (vert/orange, rouge si depasse) ;
+        a defaut d'estimation, affiche le chrono ecoule. Couleurs claires
+        adaptees au fond sombre du bandeau."""
         self._float_dot.config(fg=_STATE_COLORS[mode])
         self._float_status.config(text=_STATUS[mode])
-        self._float_time.config(text=_fmt(seconds))
+
+        assigned = self._selected_assigned_project()
+        estimated = assigned.get("estimated_duration_sec", 0) if assigned else 0
+        if estimated and estimated > 0:
+            remaining = estimated - seconds
+            if remaining < 0:
+                self._overrun = True  # seul le temps pulse (zoom/dezoom)
+                self._float_time.config(text=f"Dépassé {_fmt(-remaining)}",
+                                        fg="#f87171")
+            else:
+                self._overrun = False
+                color = "#fbbf24" if remaining <= 600 else "#4ade80"  # orange/vert
+                self._float_time.config(text=f"Restant {_fmt(remaining)}",
+                                        fg=color, font=_FLOAT_FONT)
+        else:
+            self._overrun = False
+            self._float_time.config(text=_fmt(seconds), fg="#ffffff",
+                                    font=_FLOAT_FONT)
+        self._anchor_floating()
 
     # --- configuration (nom du monteur) ---
 
@@ -537,34 +543,13 @@ class AppWindow:
             self.on_close()
             self.root.destroy()
 
-    # --- temps restant du projet (haut a droite) ---
-
-    def _update_remaining(self, seconds):
-        assigned = self._selected_assigned_project()
-        estimated = assigned.get("estimated_duration_sec", 0) if assigned else 0
-        if not estimated or estimated <= 0:
-            self._overrun = False
-            self.remaining_prefix.config(text="")
-            self.remaining_time.config(text="", font=_REMAINING_FONT)
-            return
-        remaining = estimated - seconds
-        if remaining < 0:
-            self._overrun = True  # seule l'heure pulse (zoom/dezoom)
-            self.remaining_prefix.config(text="Dépassé", fg="#dc2626")
-            self.remaining_time.config(text=_fmt(-remaining), fg="#dc2626")
-        else:
-            self._overrun = False
-            color = "#d97706" if remaining <= 600 else "#16a34a"  # orange < 10 min
-            self.remaining_prefix.config(text="Restant", fg=color)
-            self.remaining_time.config(
-                text=_fmt(remaining), fg=color, font=_REMAINING_FONT
-            )
+    # --- battement (zoom/dezoom) du temps quand depasse ---
 
     def _pulse(self):
-        """Battement zoom/dezoom en 3 etapes (11-10-11) quand le temps est depasse."""
+        """Battement zoom/dezoom (13-12-13) du temps du bandeau quand depasse."""
         if self._overrun:
             step = (self._pulse_phase // _PULSE_HOLD) % len(_PULSE_CYCLE)
-            self.remaining_time.config(font=("Segoe UI", _PULSE_CYCLE[step], "bold"))
+            self._float_time.config(font=("Segoe UI", _PULSE_CYCLE[step], "bold"))
             self._pulse_phase += 1
         else:
             self._pulse_phase = 0
@@ -581,7 +566,6 @@ class AppWindow:
         mode = self.controller.snapshot()["mode"]
         seconds = self._displayed_seconds()
         self.status_var.set(_STATUS[mode])
-        self._update_remaining(seconds)
         self._update_floating(mode, seconds)
 
         running = mode == SessionMode.RUNNING
