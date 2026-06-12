@@ -31,6 +31,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Injecte la config (URL + clé API) depuis les Secrets
+        shell: bash
+        env:
+          SERVER_URL: ${{ secrets.AGENT_SERVER_URL }}
+          API_KEY: ${{ secrets.AGENT_API_KEY }}
+        run: |
+          if [ -z "$SERVER_URL" ] || [ -z "$API_KEY" ]; then
+            echo "::error::Secrets AGENT_SERVER_URL / AGENT_API_KEY manquants (Settings -> Secrets and variables -> Actions)"
+            exit 1
+          fi
+          python -c "import os; open('app/_build_config.py','w',encoding='utf-8').write('SERVER_URL = %r\nAPI_KEY = %r\n' % (os.environ['SERVER_URL'], os.environ['API_KEY']))"
+          echo "Config injectée (URL + clé)."
+
       - name: Build de l'exe (PyInstaller)
         run: pyinstaller agent.spec --noconfirm --clean
 

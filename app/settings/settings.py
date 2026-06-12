@@ -8,11 +8,23 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.core.logging import log
 from app.settings.paths import CONFIG_PATH, ENV_PATH
 
+# Config injectee au BUILD par la CI (app/_build_config.py, jamais committe) :
+# l'.exe publie marche sans .env. Absent en dev/local -> placeholders ci-dessous.
+# Un .env reste prioritaire au runtime (voir load_config) pour les tests.
+try:
+    from app import _build_config as _bc
+
+    _BUILD_SERVER_URL = getattr(_bc, "SERVER_URL", "") or ""
+    _BUILD_API_KEY = getattr(_bc, "API_KEY", "") or ""
+except Exception:
+    _BUILD_SERVER_URL = ""
+    _BUILD_API_KEY = ""
+
 # L'identite affichee (nom) est saisie dans l'UI ; seule la cle technique stable
 # (employee_id, basee sur la machine) vit dans la config.
 DEFAULT_CONFIG = {
-    "server_url": "http://localhost:8000",
-    "api_key": "CHANGE_ME",
+    "server_url": _BUILD_SERVER_URL or "http://localhost:8000",
+    "api_key": _BUILD_API_KEY or "CHANGE_ME",
     "employee_id": f"{getpass.getuser()}@{socket.gethostname()}",
     "employee_name": "",  # saisi via l'ecran Configuration de l'app
     "sample_interval_sec": 5,

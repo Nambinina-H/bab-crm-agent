@@ -33,3 +33,6 @@
   est telechargee, un bandeau "Une nouvelle version est prete" + bouton
   **Redemarrer** propose d'appliquer la MAJ immediatement (sinon elle s'applique
   au prochain demarrage).
+- **Config injectee au build (URL + cle API)** : l'.exe publie par la CI marche
+  **sans .env** (valeurs lues depuis les Secrets GitHub, jamais committees). Un
+  `.env` local reste prioritaire au runtime (tests / serveur de staging).

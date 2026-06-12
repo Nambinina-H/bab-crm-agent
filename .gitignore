@@ -3,6 +3,9 @@
 config.json
 projects_history.json
 
+# Config injectee au build par la CI (URL + cle API depuis les Secrets GitHub)
+app/_build_config.py
+
 # Base de donnees locale (buffer hors-ligne)
 *.db
 *.db-wal
