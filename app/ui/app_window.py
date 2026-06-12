@@ -1,5 +1,4 @@
 import ctypes
-import re
 import sys
 import threading
 import time
@@ -15,44 +14,22 @@ from app.services import storage_service
 from app.services.update_service import apply_pending_update, is_update_ready
 from app.settings.paths import LOGO_PNG
 from app.settings.settings import save_config
+from app.ui.floating_timer import FloatingTimer
+from app.ui.notification import NotificationBar
+from app.ui.theme import STATUS, VERSIONS, VERSION_RE
 from app.version import __version__
 
 
-def _fmt(seconds):
-    s = int(seconds)
-    return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
-
-
-_STATUS = {
-    SessionMode.STOPPED: "Arrete",
-    SessionMode.RUNNING: "En cours",
-    SessionMode.PAUSED: "En pause",
-}
-
-_STATE_COLORS = {
-    SessionMode.STOPPED: "#9ca3af",
-    SessionMode.RUNNING: "#22c55e",
-    SessionMode.PAUSED: "#f59e0b",
-}
-
-_FLOAT_SIZE = 12  # taille de base du temps dans le bandeau flottant (px)
-_FLOAT_FONT = ("Segoe UI", _FLOAT_SIZE, "bold")
-# Battement (zoom/dezoom) du temps quand le projet est depasse : cycle 13-12-13.
-_PULSE_CYCLE = (_FLOAT_SIZE + 1, _FLOAT_SIZE, _FLOAT_SIZE + 1)
-_PULSE_HOLD = 6  # frames par palier (80 ms x 6 = ~0,5 s)
-
-_VERSIONS = [f"V{i}" for i in range(1, 11)]
-_VERSION_RE = re.compile(r"^[Vv]\d+$")  # V suivi de chiffres : V1, V2, V12...
-
-
 class AppWindow:
-    """Fenetre de controle (thread principal). Deux pages (Accueil / Parametres)
-    commutables via la barre de menu. Le worker de capture tourne dans un thread
-    de fond.
+    """Fenetre de controle (thread principal) — ORCHESTRATEUR.
 
-    Le chrono est **cumulatif par livrable** (client + video + version) : il
-    affiche le total deja enregistre + le temps en cours. Selectionner une video
-    existante pre-remplit le client et restaure son cumul.
+    Assemble les pages (Accueil / Parametres), le bandeau de notification et le
+    timer flottant (composants `ui/`), cable les actions vers le `controller` /
+    les services, et tient la boucle de rafraichissement (1 s). Aucune logique
+    reseau/DB ici : tout passe par le controller et les services.
+
+    Le chrono est cumulatif par livrable (client + video + version) : total deja
+    enregistre + temps en cours.
     """
 
     _ASSIGNED_REFRESH_MS = 20000  # refresh des projets assignes (ms)
@@ -64,8 +41,6 @@ class AppWindow:
         self.on_close = on_close
         self.assigned_projects = self._load_assigned_projects()
         self._assigned_by_label = {}
-        self._overrun = False      # temps prevu depasse -> pulsation
-        self._pulse_phase = 0
         # Projets assignes recus en arriere-plan (thread reseau) -> appliques
         # par la boucle UI. None = rien en attente.
         self._pending_assigned = None
@@ -80,17 +55,16 @@ class AppWindow:
         self._set_window_icon()
         self._remove_maximize_button()
         self._build_menu()
-        self._build_notification()  # barre de notif (en haut, masquee par defaut)
-        # Corps : les pages vivent ici, sous la barre de notification.
+        # Corps : les pages vivent ici ; le bandeau de notif s'insere au-dessus.
         self._body = ttk.Frame(self.root)
         self._body.pack(fill="both", expand=True)
+        self._notif = NotificationBar(self.root, before=self._body)
         self._build_main_page()
         self._build_settings_page()
-        self._build_floating_timer()
+        self._floating = FloatingTimer(self.root)
 
         self._update_who()
         self._refresh()
-        self._pulse()
         # Refresh periodique des projets assignes (create/update/delete refletes).
         self.root.after(self._ASSIGNED_REFRESH_MS, self._tick_assigned_refresh)
 
@@ -106,47 +80,6 @@ class AppWindow:
         menubar.add_command(label="Accueil", command=self._show_main)
         menubar.add_command(label="Paramètres", command=self._show_settings)
         self.root.config(menu=menubar)
-
-    # --- bandeau de notification (reutilisable) ---
-
-    def _build_notification(self):
-        """Bandeau bleu en haut de la fenetre : message + action + fermeture.
-        Masque par defaut ; affiche via _show_notification()."""
-        self._notif_action_cb = None
-        bar = tk.Frame(self.root, bg="#1d4ed8")
-        self._notif_bar = bar
-        self._notif_label = tk.Label(
-            bar, bg="#1d4ed8", fg="white", font=("Segoe UI", 9),
-            wraplength=230, justify="left", anchor="w",
-        )
-        self._notif_label.pack(side="left", padx=(10, 6), pady=6)
-        tk.Button(
-            bar, text="✕", bd=0, relief="flat", bg="#1d4ed8", fg="white",
-            activebackground="#1d4ed8", activeforeground="white",
-            cursor="hand2", command=self._hide_notification,
-        ).pack(side="right", padx=(0, 8))
-        self._notif_btn = tk.Button(
-            bar, text="", bd=0, relief="flat", bg="white", fg="#1d4ed8",
-            activebackground="#e5e7eb", font=("Segoe UI", 9, "bold"),
-            cursor="hand2", padx=8, command=self._on_notif_action,
-        )  # affiche seulement s'il y a une action
-
-    def _on_notif_action(self):
-        if self._notif_action_cb:
-            self._notif_action_cb()
-
-    def _show_notification(self, message, action_text=None, action_cb=None):
-        self._notif_label.config(text=message)
-        self._notif_action_cb = action_cb
-        if action_text and action_cb:
-            self._notif_btn.config(text=action_text)
-            self._notif_btn.pack(side="right", padx=(0, 4), pady=4)
-        else:
-            self._notif_btn.pack_forget()
-        self._notif_bar.pack(side="top", fill="x", before=self._body)
-
-    def _hide_notification(self):
-        self._notif_bar.pack_forget()
 
     def _restart_for_update(self):
         """Applique la mise a jour deja telechargee : ferme proprement puis un
@@ -204,7 +137,7 @@ class AppWindow:
             self._video_box.bind("<FocusIn>", lambda _e: self._refresh_video_values())
 
             self.version_var = self._field(f, "Version", combo=True,
-                                           values=_VERSIONS, readonly=True)
+                                           values=VERSIONS, readonly=True)
             self.version_var.set("V1")
 
         for var in (self.client_var, self.video_var, self.version_var):
@@ -249,12 +182,11 @@ class AppWindow:
     def _field(self, parent, label, combo=False, values=None, readonly=False):
         ttk.Label(parent, text=label).pack(anchor="w", padx=14, pady=(10, 2))
         var = tk.StringVar()
+        state = "readonly" if readonly else "normal"
         if combo:
-            state = "readonly" if readonly else "normal"
             widget = ttk.Combobox(parent, textvariable=var,
                                   values=values or [], state=state)
         else:
-            state = "readonly" if readonly else "normal"
             widget = ttk.Entry(parent, textvariable=var, state=state)
         widget.pack(fill="x", padx=14)
         if label == "Nom de la video":
@@ -382,73 +314,6 @@ class AppWindow:
         except Exception:
             pass
 
-    # --- timer flottant (overlay verrouille, haut a droite de l'ecran) ---
-
-    def _build_floating_timer(self):
-        """Petit bandeau chrono toujours au-dessus, ancre en haut a droite de
-        l'ecran. Verrouille : pas de deplacement ni de fermeture ; visible
-        jusqu'a la fermeture de l'application (detruit avec la fenetre)."""
-        win = tk.Toplevel(self.root)
-        win.overrideredirect(True)        # pas de barre de titre
-        win.attributes("-topmost", True)  # au-dessus de tout
-        try:
-            win.attributes("-alpha", 0.95)
-        except Exception:
-            pass
-
-        bg = "#111827"
-        frame = tk.Frame(win, bg=bg, padx=12, pady=7, highlightthickness=1,
-                         highlightbackground="#374151")
-        frame.pack()
-        self._float_dot = tk.Label(frame, text="●", fg="#9ca3af", bg=bg,
-                                   font=("Segoe UI", 11))
-        self._float_dot.pack(side="left", padx=(0, 6))
-        self._float_status = tk.Label(frame, text="Arrete", fg="#e5e7eb", bg=bg,
-                                      font=("Segoe UI", 9))
-        self._float_status.pack(side="left", padx=(0, 8))
-        self._float_time = tk.Label(frame, text="00:00:00", fg="#ffffff", bg=bg,
-                                    font=_FLOAT_FONT)
-        self._float_time.pack(side="left")
-
-        # Position fixe : coin haut droit de l'ecran (verrouille).
-        win.update_idletasks()
-        sw = win.winfo_screenwidth()
-        win.geometry(f"+{sw - win.winfo_width() - 16}+16")
-        self.floating = win
-
-    def _anchor_floating(self):
-        """Re-cale le bandeau sur le bord droit de l'ecran (sa largeur change
-        selon le texte : 'Restant ...' / 'Depasse ...' / chrono)."""
-        self.floating.update_idletasks()
-        sw = self.floating.winfo_screenwidth()
-        self.floating.geometry(f"+{sw - self.floating.winfo_width() - 16}+16")
-
-    def _update_floating(self, mode, seconds):
-        """Affiche le temps RESTANT du projet (vert/orange, rouge si depasse) ;
-        a defaut d'estimation, affiche le chrono ecoule. Couleurs claires
-        adaptees au fond sombre du bandeau."""
-        self._float_dot.config(fg=_STATE_COLORS[mode])
-        self._float_status.config(text=_STATUS[mode])
-
-        assigned = self._selected_assigned_project()
-        estimated = assigned.get("estimated_duration_sec", 0) if assigned else 0
-        if estimated and estimated > 0:
-            remaining = estimated - seconds
-            if remaining < 0:
-                self._overrun = True  # seul le temps pulse (zoom/dezoom)
-                self._float_time.config(text=f"Dépassé {_fmt(-remaining)}",
-                                        fg="#f87171")
-            else:
-                self._overrun = False
-                color = "#fbbf24" if remaining <= 600 else "#4ade80"  # orange/vert
-                self._float_time.config(text=f"Restant {_fmt(remaining)}",
-                                        fg=color, font=_FLOAT_FONT)
-        else:
-            self._overrun = False
-            self._float_time.config(text=_fmt(seconds), fg="#ffffff",
-                                    font=_FLOAT_FONT)
-        self._anchor_floating()
-
     # --- configuration (nom du monteur) ---
 
     def _update_who(self):
@@ -574,7 +439,7 @@ class AppWindow:
                 )
                 return
             self._apply_assigned_project(project)
-        if not _VERSION_RE.match(version):
+        if not VERSION_RE.match(version):
             messagebox.showwarning(
                 "Version invalide",
                 "La version doit etre au format V1, V2, V3... (ex. V2).",
@@ -599,18 +464,6 @@ class AppWindow:
             self.on_close()
             self.root.destroy()
 
-    # --- battement (zoom/dezoom) du temps quand depasse ---
-
-    def _pulse(self):
-        """Battement zoom/dezoom (13-12-13) du temps du bandeau quand depasse."""
-        if self._overrun:
-            step = (self._pulse_phase // _PULSE_HOLD) % len(_PULSE_CYCLE)
-            self._float_time.config(font=("Segoe UI", _PULSE_CYCLE[step], "bold"))
-            self._pulse_phase += 1
-        else:
-            self._pulse_phase = 0
-        self.root.after(80, self._pulse)
-
     # --- rafraichissement periodique (1 s) ---
 
     def _refresh(self):
@@ -622,7 +475,7 @@ class AppWindow:
         # Nouvelle version telechargee -> on propose le redemarrage (une fois).
         if not self._update_notified and is_update_ready():
             self._update_notified = True
-            self._show_notification(
+            self._notif.show(
                 "Une nouvelle version est prête.",
                 action_text="Redémarrer",
                 action_cb=self._restart_for_update,
@@ -630,8 +483,11 @@ class AppWindow:
 
         mode = self.controller.snapshot()["mode"]
         seconds = self._displayed_seconds()
-        self.status_var.set(_STATUS[mode])
-        self._update_floating(mode, seconds)
+        self.status_var.set(STATUS[mode])
+
+        assigned = self._selected_assigned_project()
+        estimated = assigned.get("estimated_duration_sec", 0) if assigned else 0
+        self._floating.update(mode, seconds, estimated)
 
         running = mode == SessionMode.RUNNING
         stopped = mode == SessionMode.STOPPED

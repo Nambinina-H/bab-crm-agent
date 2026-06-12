@@ -36,3 +36,8 @@
 - **Config injectee au build (URL + cle API)** : l'.exe publie par la CI marche
   **sans .env** (valeurs lues depuis les Secrets GitHub, jamais committees). Un
   `.env` local reste prioritaire au runtime (tests / serveur de staging).
+
+**Interne**
+- Decoupage de l'UI (`app_window.py` monolithe) en composants `ui/` : `theme`
+  (constantes), `notification` (bandeau reutilisable), `floating_timer`
+  (overlay) ; `app_window` devient l'orchestrateur. Iso-comportement.
