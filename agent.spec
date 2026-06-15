@@ -23,6 +23,7 @@ exe = EXE(
     a.datas,
     [],
     name='BABCRM - agent',
+    icon='assets/logo.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

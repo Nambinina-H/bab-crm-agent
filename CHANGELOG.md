@@ -1,6 +1,6 @@
 # Changelog
 
-## Non publie
+## 1.0.3
 **Added**
 - **APM (clics / minute)** : l'agent compte les clics souris (boutons
   gauche/droit/milieu) et les rattache au segment en cours ; la plateforme
@@ -11,6 +11,14 @@
   jamais de contenu de frappe (uniquement un nombre). Entierement additif :
   l'actif/inactif, le taux et les heures sont inchanges ; un ancien agent qui
   n'envoie pas de clics est traite comme 0.
+
+**Changed**
+- **Timer flottant** : suppression du clignotement (zoom avant/arriere) quand le
+  projet est depasse ; le temps reste simplement affiche en rouge.
+
+**Fixed**
+- **Icone de l'application** : l'.exe porte desormais le logo BAB CRM (barre des
+  taches / Explorateur) au lieu de l'icone Python generique.
 
 ## 1.0.0
 **Added**
