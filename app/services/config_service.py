@@ -1,6 +1,9 @@
+import threading
+
 import requests
 
 from app.core.logging import log
+from app.services import update_service
 from app.settings.settings import save_config
 
 # Bornes defensives : l'agent revalide meme si le serveur valide deja, pour ne
@@ -11,6 +14,9 @@ _BOUNDS = {
     "sync_interval_sec": (5, 3600),
     "sync_batch_size": (1, 5000),
 }
+
+# Dernier "top de mise a jour" vu (None = pas encore lu, sert de reference).
+_last_update_signal = None
 
 
 def _clamp(key, value):
@@ -46,4 +52,20 @@ def pull_remote_config(cfg):
     if applied:
         save_config(applied)          # cache local pour le prochain demarrage
         log(f"Config mise a jour depuis le serveur: {applied}")
+
+    # Top de mise a jour manuel (bouton du dashboard) : si le compteur augmente,
+    # on telecharge tout de suite (sans attendre le check periodique de 30 min).
+    # La notif "Redemarrer" s'affichera ensuite, une fois l'.exe telecharge.
+    global _last_update_signal
+    signal = remote.get("update_signal")
+    if isinstance(signal, int):
+        if _last_update_signal is None:
+            _last_update_signal = signal   # 1re lecture : reference, pas de MAJ
+        elif signal > _last_update_signal:
+            _last_update_signal = signal
+            log("Top de mise a jour recu : telechargement immediat.")
+            threading.Thread(
+                target=update_service.check_and_download, daemon=True
+            ).start()
+
     return applied

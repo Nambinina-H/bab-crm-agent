@@ -11,6 +11,11 @@
   jamais de contenu de frappe (uniquement un nombre). Entierement additif :
   l'actif/inactif, le taux et les heures sont inchanges ; un ancien agent qui
   n'envoie pas de clics est traite comme 0.
+- **Mise a jour immediate depuis le dashboard** : un bouton « Mettre a jour tous
+  les agents maintenant » (Parametres) declenche le telechargement sur tous les
+  agents ouverts en ~1 min (au lieu d'attendre la verification automatique de
+  30 min) ; la notif « Redemarrer » s'affiche ensuite. La verif periodique
+  reste le filet de secours.
 
 **Changed**
 - **Timer flottant** : suppression du clignotement (zoom avant/arriere) quand le
