@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.5
+**Fixed**
+- **Mise a jour fiable** : l'agent verifie desormais que le fichier telecharge est
+  **complet** (taille exacte annoncee par GitHub) et **valide** (vrai .exe) AVANT
+  de l'installer. Evite d'appliquer une MAJ corrompue/tronquee qui provoquait
+  l'erreur « Failed to load Python DLL ... python312.dll » au demarrage.
+
 ## 1.0.4
 **Added**
 - **Version remontee au dashboard** : l'agent joint sa version a chaque heartbeat ;

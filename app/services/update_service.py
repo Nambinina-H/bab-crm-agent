@@ -62,7 +62,7 @@ def apply_pending_update():
     exe, folder, staged = _paths()
     if not os.path.exists(staged):
         return
-    if os.path.getsize(staged) < _MIN_EXE_SIZE:
+    if os.path.getsize(staged) < _MIN_EXE_SIZE or not _is_valid_exe(staged):
         _safe_remove(staged)  # telechargement partiel/corrompu : on jette
         return
 
@@ -123,19 +123,36 @@ def check_and_download():
         )
         if not asset:
             return
+        expected_size = asset.get("size") or 0  # taille exacte annoncee par GitHub
 
         _, _, staged = _paths()
         tmp = staged + ".part"
-        with requests.get(
-            asset["browser_download_url"], stream=True, timeout=180
-        ) as dl:
-            dl.raise_for_status()
-            with open(tmp, "wb") as f:
-                for chunk in dl.iter_content(chunk_size=65536):
-                    if chunk:
-                        f.write(chunk)
-        os.replace(tmp, staged)  # rename atomique une fois le fichier complet
-        log(f"Mise a jour {remote} telechargee (appliquee au prochain demarrage).")
+        try:
+            with requests.get(
+                asset["browser_download_url"], stream=True, timeout=180
+            ) as dl:
+                dl.raise_for_status()
+                with open(tmp, "wb") as f:
+                    for chunk in dl.iter_content(chunk_size=65536):
+                        if chunk:
+                            f.write(chunk)
+
+            # Integrite : on n'installe JAMAIS un telechargement incomplet/corrompu
+            # (sinon l'.exe ne demarre pas : "Failed to load Python DLL").
+            actual = os.path.getsize(tmp)
+            if expected_size and actual != expected_size:
+                log(f"MAJ {remote} ignoree : telechargement incomplet "
+                    f"({actual}/{expected_size} octets).")
+                return
+            if actual < _MIN_EXE_SIZE or not _is_valid_exe(tmp):
+                log(f"MAJ {remote} ignoree : fichier invalide.")
+                return
+
+            os.replace(tmp, staged)  # rename atomique : le fichier est complet & valide
+            log(f"Mise a jour {remote} verifiee et telechargee "
+                f"(appliquee au prochain demarrage).")
+        finally:
+            _safe_remove(tmp)  # supprime un .part restant (echec/incomplet)
     except Exception as exc:
         log(f"Verification de mise a jour: {exc}")
 
@@ -151,6 +168,15 @@ def start_background_checker(interval_minutes=30):
             time.sleep(max(5, interval_minutes) * 60)
 
     threading.Thread(target=loop, daemon=True).start()
+
+
+def _is_valid_exe(path):
+    """Vrai si le fichier est bien un executable Windows (entete 'MZ')."""
+    try:
+        with open(path, "rb") as f:
+            return f.read(2) == b"MZ"
+    except OSError:
+        return False
 
 
 def _safe_remove(path):
