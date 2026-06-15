@@ -47,7 +47,7 @@ class Syncer(threading.Thread):
             "employee_id": r[1], "employee_name": r[2], "client": r[3],
             "app": r[4], "window_title": r[5], "project": r[6], "version": r[7],
             "state": r[8], "start_ts": r[9], "end_ts": r[10],
-            "duration_sec": r[11],
+            "duration_sec": r[11], "clicks": r[12],
         } for r in rows]
 
         resp = requests.post(

@@ -2,6 +2,7 @@ import threading
 import time
 from datetime import datetime
 
+from app.collectors.clicks import ClickCounter
 from app.collectors.foreground import get_foreground_app
 from app.collectors.idle import get_idle_seconds
 from app.core.session import SessionMode
@@ -31,9 +32,11 @@ class CaptureWorker(threading.Thread):
         self._current = None
         self._live_lock = threading.Lock()
         self._live = None  # {client, video, version, started, paused}
+        self._clicks = ClickCounter()  # APM : clics souris, comptes en continu
 
     def run(self):
         conn = init_db()
+        self._clicks.start()
         try:
             while not self._stop.is_set():
                 self._tick(conn)
@@ -44,6 +47,7 @@ class CaptureWorker(threading.Thread):
                 self._finalize(conn, self._current, now_utc_iso())
                 self._current = None
             self._set_live(None)
+            self._clicks.stop()
 
     def _tick(self, conn):
         snap = self.controller.snapshot()
@@ -72,6 +76,8 @@ class CaptureWorker(threading.Thread):
         if self._current is None or key != self._current["_key"]:
             if self._current is not None:
                 self._finalize(conn, self._current, ts)
+            else:
+                self._clicks.read_and_reset()  # clics hors session : ignores
             self._current = make_segment(
                 self.cfg["employee_id"], snap["name"], client, app, title,
                 project, version, state, ts,
@@ -87,6 +93,8 @@ class CaptureWorker(threading.Thread):
         start = datetime.fromisoformat(seg["start_ts"])
         end = datetime.fromisoformat(end_ts)
         seg["duration_sec"] = max(0, int((end - start).total_seconds()))
+        # Clics survenus pendant ce segment (depuis la derniere cloture).
+        seg["clicks"] = self._clicks.read_and_reset()
         if seg["duration_sec"] > 0:
             store_segment(conn, seg)
 

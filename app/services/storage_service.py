@@ -27,6 +27,7 @@ def init_db():
             start_ts      TEXT,
             end_ts        TEXT,
             duration_sec  INTEGER,
+            clicks        INTEGER DEFAULT 0,
             synced        INTEGER DEFAULT 0
         )
     """)
@@ -41,18 +42,21 @@ def _ensure_columns(conn):
     for col in ("client", "version"):
         if col not in existing:
             conn.execute(f"ALTER TABLE segments ADD COLUMN {col} TEXT")
+    if "clicks" not in existing:
+        conn.execute("ALTER TABLE segments ADD COLUMN clicks INTEGER DEFAULT 0")
 
 
 def store_segment(conn, seg):
     conn.execute("""
         INSERT INTO segments
         (employee_id, employee_name, client, app, window_title, project,
-         version, state, start_ts, end_ts, duration_sec, synced)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,0)
+         version, state, start_ts, end_ts, duration_sec, clicks, synced)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0)
     """, (
         seg["employee_id"], seg["employee_name"], seg["client"], seg["app"],
         seg["window_title"], seg["project"], seg["version"], seg["state"],
-        seg["start_ts"], seg["end_ts"], seg["duration_sec"]
+        seg["start_ts"], seg["end_ts"], seg["duration_sec"],
+        seg.get("clicks", 0)
     ))
     conn.commit()
 
@@ -60,7 +64,7 @@ def store_segment(conn, seg):
 def fetch_unsynced(conn, limit):
     return conn.execute("""
         SELECT id, employee_id, employee_name, client, app, window_title,
-               project, version, state, start_ts, end_ts, duration_sec
+               project, version, state, start_ts, end_ts, duration_sec, clicks
         FROM segments WHERE synced = 0
         ORDER BY id LIMIT ?
     """, (limit,)).fetchall()

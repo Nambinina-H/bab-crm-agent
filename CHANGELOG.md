@@ -1,5 +1,17 @@
 # Changelog
 
+## Non publie
+**Added**
+- **APM (clics / minute)** : l'agent compte les clics souris (boutons
+  gauche/droit/milieu) et les rattache au segment en cours ; la plateforme
+  affiche un APM par collaborateur = clics / minutes actives. Indicateur
+  d'**intensite d'interaction** (pas un score de productivite), distinct du
+  taux d'activite. Comptage par sondage leger (`GetAsyncKeyState`), **sans
+  hook ni injection** (profil antivirus quasi nul) ; **jamais le clavier**,
+  jamais de contenu de frappe (uniquement un nombre). Entierement additif :
+  l'actif/inactif, le taux et les heures sont inchanges ; un ancien agent qui
+  n'envoie pas de clics est traite comme 0.
+
 ## 1.0.0
 **Added**
 - Agent Windows (Tkinter) : pointage declaratif (client / video / version) valide
