@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.4
+**Added**
+- **Version remontee au dashboard** : l'agent joint sa version a chaque heartbeat ;
+  la plateforme affiche la version installee sur chaque poste (Parametres ->
+  « Versions des agents »). Additif, sans impact sur le reste.
+
 ## 1.0.3
 **Added**
 - **APM (clics / minute)** : l'agent compte les clics souris (boutons

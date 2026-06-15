@@ -6,6 +6,7 @@ from app.collectors.foreground import get_foreground_app
 from app.collectors.idle import get_idle_seconds
 from app.core.logging import log
 from app.core.session import SessionMode
+from app.version import __version__
 
 
 class HeartbeatSender(threading.Thread):
@@ -89,9 +90,11 @@ class HeartbeatSender(threading.Thread):
             log(f"Offline non envoye: {exc}")
 
     def _post(self, payload):
+        # On joint la version de l'agent a chaque heartbeat : le dashboard peut
+        # ainsi afficher la version installee sur chaque poste.
         requests.post(
             self.cfg["server_url"].rstrip("/") + "/api/heartbeat",
-            json=payload,
+            json={**payload, "agent_version": __version__},
             headers={"X-API-Key": self.cfg["api_key"]},
             timeout=8,
         )
