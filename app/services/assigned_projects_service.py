@@ -18,9 +18,21 @@ def fetch_assigned_projects(cfg):
         version = str(item.get("version") or "").strip()
         if client and video_name and version:
             projects.append({
+                "id": item.get("id"),
                 "client": client,
                 "video_name": video_name,
                 "version": version,
                 "estimated_duration_sec": item.get("estimated_duration_sec") or 0,
             })
     return projects
+
+
+def complete_project(cfg, project_id):
+    """Marque un projet assigne comme termine (cote monteur)."""
+    resp = requests.post(
+        cfg["server_url"].rstrip("/") + "/api/agent/project-complete",
+        json={"employee_id": cfg["employee_id"], "project_id": project_id},
+        headers={"X-API-Key": cfg["api_key"]},
+        timeout=8,
+    )
+    resp.raise_for_status()

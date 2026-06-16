@@ -8,7 +8,10 @@ from tkinter import ttk
 
 from app.core.session import SessionMode
 from app.core.logging import log
-from app.services.assigned_projects_service import fetch_assigned_projects
+from app.services.assigned_projects_service import (
+    complete_project,
+    fetch_assigned_projects,
+)
 from app.services.register_service import register_employee
 from app.services import storage_service
 from app.services.update_service import apply_pending_update, is_update_ready
@@ -32,7 +35,8 @@ class AppWindow:
     enregistre + temps en cours.
     """
 
-    _ASSIGNED_REFRESH_MS = 20000  # refresh des projets assignes (ms)
+    _ASSIGNED_REFRESH_MS = 5000  # refresh des projets assignes (ms) : reactif aux
+    # changements cote serveur (assignation, terminer/rouvrir) sans trop solliciter.
 
     def __init__(self, controller, worker, cfg, on_close):
         self.controller = controller
@@ -44,6 +48,7 @@ class AppWindow:
         # Projets assignes recus en arriere-plan (thread reseau) -> appliques
         # par la boucle UI. None = rien en attente.
         self._pending_assigned = None
+        self._pending_error = None   # message d'erreur a afficher (thread -> UI)
         self._update_notified = False  # notif "nouvelle version" deja affichee ?
 
         self.root = tk.Tk()
@@ -158,6 +163,15 @@ class AppWindow:
         self.pause_btn.grid(row=0, column=1, padx=4)
         self.stop_btn.grid(row=0, column=2, padx=4)
 
+        # Bouton "Terminé" (mode assigne) : a part des controles du chrono, pour
+        # marquer le projet livre (il sort alors de la liste).
+        if self.assigned_projects is not None:
+            self.complete_btn = ttk.Button(
+                f, text="✓ Marquer ce projet terminé",
+                command=self._complete_project,
+            )
+            self.complete_btn.pack(pady=(0, 4))
+
     def _build_settings_page(self):
         f = ttk.Frame(self._body)
         self.settings_frame = f
@@ -167,7 +181,7 @@ class AppWindow:
         ttk.Label(f, text="Paramètres", font=("Segoe UI", 15, "bold")).pack(
             pady=(12, 16))
 
-        ttk.Label(f, text="Nom du monteur").pack(anchor="w", padx=16, pady=(0, 2))
+        ttk.Label(f, text="Nom").pack(anchor="w", padx=16, pady=(0, 2))
         self.settings_name_var = tk.StringVar(value=self.cfg.get("employee_name", ""))
         entry = ttk.Entry(f, textvariable=self.settings_name_var)
         entry.pack(fill="x", padx=16)
@@ -318,12 +332,12 @@ class AppWindow:
 
     def _update_who(self):
         name = self.cfg.get("employee_name") or "(non configure)"
-        self.who_var.set(f"Monteur : {name}")
+        self.who_var.set(f"Collaborateur : {name}")
 
     def _save_settings(self):
         name = self.settings_name_var.get().strip()
         if not name:
-            messagebox.showwarning("Nom requis", "Renseigne le nom du monteur.")
+            messagebox.showwarning("Nom requis", "Renseigne le nom du collaborateur.")
             return
         save_config({"employee_name": name})
         self.cfg["employee_name"] = name
@@ -422,7 +436,7 @@ class AppWindow:
             if self.assigned_projects == []:
                 messagebox.showwarning(
                     "Aucun projet assigne",
-                    "Aucun projet n'est assigne a ce monteur.",
+                    "Aucun projet n'est assigne a ce collaborateur.",
                 )
                 return
             messagebox.showwarning(
@@ -458,6 +472,39 @@ class AppWindow:
         self.worker.wake()
         self._refresh_video_values()
 
+    def _complete_project(self):
+        """Marque le projet selectionne comme termine (cote monteur)."""
+        project = self._selected_assigned_project()
+        if not project or not project.get("id"):
+            messagebox.showwarning(
+                "Aucun projet", "Selectionne un projet a marquer termine."
+            )
+            return
+        label = f"{project['video_name']} ({project['version']})"
+        if not messagebox.askokcancel(
+            "Marquer terminé",
+            f"Marquer « {label} » comme terminé ?\n\n"
+            "Il sera retire de ta liste.",
+        ):
+            return
+        # Terminer arrete le suivi en cours.
+        if self.controller.snapshot()["mode"] != SessionMode.STOPPED:
+            self.controller.stop()
+            self.worker.wake()
+        threading.Thread(
+            target=self._complete_bg, args=(project["id"],), daemon=True
+        ).start()
+
+    def _complete_bg(self, project_id):
+        """Thread reseau : marque termine puis rafraichit la liste (le projet
+        disparait). En cas d'echec, l'UI affiche le message a la prochaine boucle."""
+        try:
+            complete_project(self.cfg, project_id)
+            self._pending_assigned = fetch_assigned_projects(self.cfg)
+        except Exception as exc:
+            log(f"Marquage termine echoue: {exc}")
+            self._pending_error = "Impossible de marquer le projet terminé."
+
     def _handle_close(self):
         if messagebox.askokcancel("Quitter", "Arreter le suivi et quitter ?"):
             self.controller.stop()
@@ -471,6 +518,11 @@ class AppWindow:
         if self._pending_assigned is not None:
             projects, self._pending_assigned = self._pending_assigned, None
             self._apply_assigned_refresh(projects)
+
+        # Erreur remontee par un thread (ex. marquage termine) -> popup une fois.
+        if self._pending_error is not None:
+            msg, self._pending_error = self._pending_error, None
+            messagebox.showerror("Erreur", msg)
 
         # Nouvelle version telechargee -> on propose le redemarrage (une fois).
         if not self._update_notified and is_update_ready():

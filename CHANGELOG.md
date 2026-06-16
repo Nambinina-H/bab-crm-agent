@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.6
+**Added**
+- **Marquer un projet terminé depuis l'agent** : un bouton « ✓ Marquer ce projet
+  terminé » (mode projets assignes) permet au monteur de signaler un livrable
+  fini. Le projet passe « terminé » cote plateforme et **sort de sa liste**
+  (le suivi en cours est arrete). Action distincte de Play/Pause/Stop.
+
+**Changed**
+- **Synchro des projets assignes plus reactive (~5 s** au lieu de 20 s) : les
+  changements cote serveur (assignation, terminer/rouvrir) apparaissent plus
+  vite dans l'agent.
+- **Vocabulaire** : « Monteur » -> « **Collaborateur** » dans l'agent.
+- **Parametres** : champ « Nom du monteur » -> « **Nom** ».
+
 ## 1.0.5
 **Fixed**
 - **Mise a jour fiable** : l'agent verifie desormais que le fichier telecharge est
