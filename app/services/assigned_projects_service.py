@@ -23,6 +23,12 @@ def fetch_assigned_projects(cfg):
                 "video_name": video_name,
                 "version": version,
                 "estimated_duration_sec": item.get("estimated_duration_sec") or 0,
+                # Priorite definie par le manager (1 = plus prioritaire ; 0 = non
+                # priorise). La liste arrive deja triee par priorite.
+                "priority": item.get("priority") or 0,
+                # Temps actif cote serveur (= ce qu'affiche le dashboard). Sert a
+                # caler le compteur de l'agent sur le serveur.
+                "spent_sec": item.get("spent_sec") or 0,
             })
     return projects
 

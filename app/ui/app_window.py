@@ -128,6 +128,11 @@ class AppWindow:
             )
             self._video_box.bind("<<ComboboxSelected>>", self._on_assigned_video_selected)
             self.version_var = self._field(f, "Version", readonly=True)
+            # Marqueur de priorite : visible seulement quand le manager a priorise
+            # le projet selectionne (1 = le plus prioritaire).
+            self.priority_var = tk.StringVar()
+            ttk.Label(f, textvariable=self.priority_var,
+                      font=("Segoe UI", 9, "bold")).pack(pady=(8, 0))
             if self.assigned_projects:
                 first_label = next(iter(self._assigned_by_label))
                 self.video_var.set(first_label)
@@ -235,12 +240,20 @@ class AppWindow:
     def _apply_assigned_project(self, project):
         self.client_var.set(project["client"])
         self.version_var.set(project["version"])
+        self._update_priority_label(project)
         self.controller.update_context(
             client=project["client"],
             project=project["video_name"],
             version=project["version"],
         )
         self.worker.wake()
+
+    def _update_priority_label(self, project):
+        """Affiche « ★ Priorité n°X » si le projet a ete priorise (sinon rien)."""
+        if not hasattr(self, "priority_var"):
+            return
+        prio = (project or {}).get("priority", 0) or 0
+        self.priority_var.set(f"★ Priorité n°{prio}" if prio > 0 else "")
 
     def _on_assigned_video_selected(self, _event=None):
         project = self._assigned_by_label.get(self.video_var.get())
@@ -404,12 +417,21 @@ class AppWindow:
 
     def _displayed_seconds(self):
         """Chrono cumulatif du livrable selectionne : total enregistre + le
-        temps du segment en cours (s'il porte sur ce meme livrable)."""
+        temps du segment en cours (s'il porte sur ce meme livrable).
+
+        Cale sur le serveur (source de verite) : on prend le plus eleve entre le
+        total serveur et le total local. En ligne, le serveur fait foi (l'agent
+        affiche le meme chiffre que le dashboard) ; hors-ligne, le local prend le
+        relais (il contient le travail pas encore envoye)."""
         assigned = self._selected_assigned_project()
         client = assigned["client"] if assigned else self.client_var.get().strip()
         video = assigned["video_name"] if assigned else self.video_var.get().strip()
         version = assigned["version"] if assigned else self.version_var.get().strip()
         base = storage_service.accumulated_seconds(client, video, version) if video else 0
+        if assigned is not None:
+            server_spent = assigned.get("spent_sec")
+            if isinstance(server_spent, (int, float)) and server_spent > base:
+                base = server_spent
 
         live = 0
         if self.controller.snapshot()["mode"] == SessionMode.RUNNING:

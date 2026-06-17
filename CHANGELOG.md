@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.0.7
+**Added**
+- **Priorisation des projets** : les projets assignes s'affichent dans l'**ordre de
+  priorite** defini par le manager (le n°1 est **pre-selectionne** a l'ouverture) ;
+  un marqueur « ★ Priorité n°X » indique le rang du projet selectionne. L'ordre
+  vient du serveur (aucune action requise sur le poste).
+
+**Changed**
+- **Compteur cale sur le serveur** : le temps affiche suit desormais le total du
+  serveur (= le dashboard) au lieu du seul buffer local, plus le temps du segment
+  en cours. Fini les ecarts agent/plateforme. Hors-ligne, le calcul local prend
+  le relais (rien n'est fige ni perdu) et tout se realigne a la reconnexion.
+- **Reset unique du buffer local** (une seule fois apres cette MAJ, des que le
+  serveur est joignable) : les segments **deja envoyes** sont purges pour repartir
+  proprement du serveur ; les segments **en attente sont conserves** (aucune
+  perte). Nettoie d'eventuels doublons locaux herites de l'ere pre-verrou.
+
+**Fixed**
+- **Verrou mono-instance** : impossible de lancer deux agents en meme temps sur
+  le meme poste/session. Deux instances simultanees capturaient l'activite **en
+  double** (segments en doublon decales de quelques microsecondes, que la
+  deduplication serveur ne voit pas) -> le temps affiche cote plateforme etait
+  **gonfle** (un projet pouvait apparaitre « depasse » a tort). Si l'agent est
+  deja ouvert, un message le signale et la 2e fenetre se ferme. Sans impact sur
+  la mise a jour automatique (qui attend deja la fermeture de l'ancien .exe avant
+  de relancer le nouveau).
+
 ## 1.0.6
 **Added**
 - **Marquer un projet terminé depuis l'agent** : un bouton « ✓ Marquer ce projet

@@ -2,6 +2,10 @@ import sys
 
 from app.core.logging import log
 from app.core.session import SessionController
+from app.core.single_instance import (
+    acquire_single_instance_lock,
+    notify_already_running,
+)
 from app.services.capture_service import CaptureWorker
 from app.services.foreground_watcher import ForegroundWatcher
 from app.services.heartbeat_service import HeartbeatSender
@@ -16,6 +20,14 @@ def main():
     # Tout au debut : si une mise a jour a ete telechargee, on l'installe puis
     # l'agent se relance automatiquement (sans toucher a la config).
     apply_pending_update()
+
+    # Verrou mono-instance : si un agent tourne deja sur ce poste/session, on
+    # quitte tout de suite. Deux agents simultanes capturaient l'activite en
+    # double -> temps gonfle cote plateforme. (Place apres apply_pending_update :
+    # la MAJ attend deja la fermeture de l'ancien .exe avant de relancer.)
+    if acquire_single_instance_lock() is None:
+        notify_already_running()
+        return
 
     if sys.platform != "win32":
         log("ATTENTION : agent concu pour Windows. "

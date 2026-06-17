@@ -78,6 +78,14 @@ def mark_synced(conn, ids):
     conn.commit()
 
 
+def purge_synced(conn):
+    """Supprime du buffer local les segments DEJA envoyes au serveur (synced=1).
+    Les segments en attente (synced=0) sont conserves -> aucune perte. Sert au
+    reset unique apres la v1.0.7 : l'agent repart du serveur (source de verite)."""
+    conn.execute("DELETE FROM segments WHERE synced = 1")
+    conn.commit()
+
+
 # --- Lecture pour l'UI (reprise d'un livrable) -------------------------------
 # Ces fonctions ouvrent leur propre connexion (appelees depuis le thread UI).
 
