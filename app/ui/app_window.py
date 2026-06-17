@@ -16,7 +16,7 @@ from app.services.register_service import register_employee
 from app.services import storage_service
 from app.services.update_service import apply_pending_update, is_update_ready
 from app.settings.paths import LOGO_PNG
-from app.settings.settings import save_config
+from app.settings.settings import derive_employee_id, save_config
 from app.ui.floating_timer import FloatingTimer
 from app.ui.notification import NotificationBar
 from app.ui.theme import STATUS, VERSIONS, VERSION_RE
@@ -354,8 +354,12 @@ class AppWindow:
             return
         save_config({"employee_name": name})
         self.cfg["employee_name"] = name
+        # Identite = nom@PC : changer le nom bascule l'agent sur l'identite du
+        # nouvel utilisateur (les donnees de l'ancien restent sous son nom).
+        self.cfg["employee_id"] = derive_employee_id(name)
         self.controller.update_context(name=name)
-        self._announce_employee()  # visible/assignable de suite sur la plateforme
+        self._announce_employee()  # (re)enregistre l'identite + recupere ses projets
+        self.worker.wake()  # cloture le segment courant, repart sous la nouvelle identite
         self._update_who()
         self._show_main()
 

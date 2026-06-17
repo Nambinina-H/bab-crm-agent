@@ -1,6 +1,16 @@
 # Changelog
 
-## 1.0.7
+## 1.0.8
+**Changed**
+- **Identité par personne (nom@PC)** : l'identité d'un collaborateur est désormais
+  basée sur **son nom** (et le PC), plus sur l'utilisateur Windows. Conséquences :
+  - Quand un **autre collaborateur** prend le poste, il suffit de changer le nom
+    dans Paramètres → l'agent bascule sur une **nouvelle identité** ; l'historique
+    de l'ancien **reste sous son nom** (fini le mélange Omar → Nicolas).
+  - **Insensible à la casse** (« Omar » = « omar »).
+  - **Revenir à un ancien nom** sur le poste **retrouve ses données**.
+  - **Migration transparente** au 1ᵉʳ lancement : l'ancien identifiant machine est
+    renommé en `nom@PC` côté serveur (les données suivent, **aucune perte**).
 **Added**
 - **Priorisation des projets** : les projets assignes s'affichent dans l'**ordre de
   priorite** defini par le manager (le n°1 est **pre-selectionne** a l'ouverture) ;

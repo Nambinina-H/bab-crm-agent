@@ -34,11 +34,32 @@ DEFAULT_CONFIG = {
 }
 
 # Cles ecrites dans config.json (les secrets api_key/server_url restent dans
-# .env ; employee_id est derive de la machine au runtime).
+# .env ; employee_id est derive du nom au runtime).
 _PERSISTED_KEYS = (
     "employee_name", "sample_interval_sec", "idle_threshold_sec",
     "sync_interval_sec", "sync_batch_size",
 )
+
+
+def _name_slug(name):
+    """Normalise un nom pour l'identite : minuscules, espaces compactes, slug.
+    Insensible a la casse -> « Omar » et « omar » donnent la meme identite."""
+    n = " ".join((name or "").strip().lower().split()).replace(" ", "-")
+    return "".join(c for c in n if c.isalnum() or c == "-")
+
+
+def machine_id():
+    """Ancien schema d'identite (utilisateur Windows @ nom du PC). Conserve pour
+    la migration unique vers l'identite basee sur le nom."""
+    return f"{getpass.getuser()}@{socket.gethostname()}"
+
+
+def derive_employee_id(name):
+    """Identite basee sur la PERSONNE : nom_normalise@PC. Changer le nom = changer
+    d'utilisateur sur ce poste. A defaut de nom (avant configuration), on retombe
+    sur l'identite machine."""
+    slug = _name_slug(name)
+    return f"{slug}@{socket.gethostname()}" if slug else machine_id()
 
 
 class Secrets(BaseSettings):
@@ -83,6 +104,11 @@ def load_config():
         cfg["api_key"] = secrets.api_key
     if secrets.server_url:
         cfg["server_url"] = secrets.server_url
+
+    # 3. Identite basee sur le nom (nom@PC). `machine_id` (ancien schema) est
+    #    conserve pour la migration unique cote serveur (rename -> nom@PC).
+    cfg["machine_id"] = machine_id()
+    cfg["employee_id"] = derive_employee_id(cfg.get("employee_name", ""))
 
     return cfg
 

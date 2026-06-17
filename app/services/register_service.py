@@ -10,6 +10,9 @@ def register_employee(cfg):
         json={
             "employee_id": cfg["employee_id"],
             "employee_name": cfg.get("employee_name", ""),
+            # Ancien identifiant machine : migration unique cote serveur
+            # (rename -> nom@PC). Sans effet une fois la migration faite.
+            "previous_id": cfg.get("machine_id"),
         },
         headers={"X-API-Key": cfg["api_key"]},
         timeout=8,
