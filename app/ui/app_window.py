@@ -1,4 +1,5 @@
 import ctypes
+import os
 import sys
 import threading
 import time
@@ -12,14 +13,14 @@ from app.services.assigned_projects_service import (
     complete_project,
     fetch_assigned_projects,
 )
-from app.services.register_service import register_employee
+from app.services.register_service import register_employee, set_role
 from app.services import storage_service
-from app.services.update_service import apply_pending_update, is_update_ready
+from app.services.update_service import is_update_ready, restart_for_update
 from app.settings.paths import LOGO_PNG
 from app.settings.settings import derive_employee_id, save_config
 from app.ui.floating_timer import FloatingTimer
 from app.ui.notification import NotificationBar
-from app.ui.theme import STATUS, VERSIONS, VERSION_RE
+from app.ui.theme import EMPLOYEE_ROLES, STATUS, VERSIONS, VERSION_RE
 from app.version import __version__
 
 
@@ -37,6 +38,9 @@ class AppWindow:
 
     _ASSIGNED_REFRESH_MS = 5000  # refresh des projets assignes (ms) : reactif aux
     # changements cote serveur (assignation, terminer/rouvrir) sans trop solliciter.
+    _AUTO_UPDATE_IDLE_SEC = 180  # MAJ appliquee seule apres ce temps a l'arret
+    # (les postes "juste ouverts" se mettent a jour sans rien faire ; ceux qui
+    # travaillent ne sont jamais coupes).
 
     def __init__(self, controller, worker, cfg, on_close):
         self.controller = controller
@@ -50,6 +54,11 @@ class AppWindow:
         self._pending_assigned = None
         self._pending_error = None   # message d'erreur a afficher (thread -> UI)
         self._update_notified = False  # notif "nouvelle version" deja affichee ?
+        self._update_idle_since = None  # depuis quand a l'arret avec une MAJ prete
+        # Delai d'auto-MAJ a l'arret (override par env pour tester en local).
+        self._auto_update_idle_sec = int(
+            os.environ.get("AGENT_AUTO_UPDATE_IDLE_SEC") or self._AUTO_UPDATE_IDLE_SEC
+        )
 
         self.root = tk.Tk()
         self.root.title("BABCRM - agent")
@@ -66,7 +75,7 @@ class AppWindow:
         self._notif = NotificationBar(self.root, before=self._body)
         self._build_main_page()
         self._build_settings_page()
-        self._floating = FloatingTimer(self.root)
+        self._floating = FloatingTimer(self.root, on_restart=self._restart_for_update)
 
         self._update_who()
         self._refresh()
@@ -87,13 +96,14 @@ class AppWindow:
         self.root.config(menu=menubar)
 
     def _restart_for_update(self):
-        """Applique la mise a jour deja telechargee : ferme proprement puis un
-        script remplace l'.exe et relance l'agent (config conservee)."""
+        """Applique la mise a jour (si telechargee) et relance l'agent : ferme
+        proprement (hors-ligne + arret des threads) puis un relanceur attend la
+        fin du process et redemarre. Marche en prod (swap .exe) comme en dev."""
         try:
             self.on_close()  # hors-ligne + arret des threads
         except Exception:
             pass
-        apply_pending_update()  # ecrit le script de swap puis quitte le process
+        restart_for_update()  # relanceur mutex-safe puis quitte le process
 
     # --- pages ---
 
@@ -105,6 +115,7 @@ class AppWindow:
     def _show_settings(self):
         self.main_frame.pack_forget()
         self.settings_name_var.set(self.cfg.get("employee_name", ""))
+        self.settings_role_var.set(self.cfg.get("employee_role", ""))
         self.settings_frame.pack(fill="both", expand=True)
 
     def _build_main_page(self):
@@ -128,11 +139,6 @@ class AppWindow:
             )
             self._video_box.bind("<<ComboboxSelected>>", self._on_assigned_video_selected)
             self.version_var = self._field(f, "Version", readonly=True)
-            # Marqueur de priorite : visible seulement quand le manager a priorise
-            # le projet selectionne (1 = le plus prioritaire).
-            self.priority_var = tk.StringVar()
-            ttk.Label(f, textvariable=self.priority_var,
-                      font=("Segoe UI", 9, "bold")).pack(pady=(8, 0))
             if self.assigned_projects:
                 first_label = next(iter(self._assigned_by_label))
                 self.video_var.set(first_label)
@@ -192,6 +198,14 @@ class AppWindow:
         entry.pack(fill="x", padx=16)
         entry.bind("<Return>", lambda _e: self._save_settings())
 
+        # Role metier : lie au champ role cote plateforme (page Collaborateurs).
+        ttk.Label(f, text="Rôle").pack(anchor="w", padx=16, pady=(10, 2))
+        self.settings_role_var = tk.StringVar(value=self.cfg.get("employee_role", ""))
+        ttk.Combobox(
+            f, textvariable=self.settings_role_var,
+            values=EMPLOYEE_ROLES, state="readonly",
+        ).pack(fill="x", padx=16)
+
         ttk.Button(f, text="Enregistrer", command=self._save_settings).pack(pady=18)
 
         ttk.Label(f, text=f"Version {__version__}").pack(side="bottom", pady=10)
@@ -234,26 +248,23 @@ class AppWindow:
                 label = video_name
             else:
                 label = f"{video_name} - {project['version']} ({project['client']})"
+            # Prefixe le rang de priorite (1., 2., 3...) -> l'ordre se lit
+            # directement dans la liste. Les projets non priorises restent nus.
+            prio = project.get("priority", 0) or 0
+            if prio > 0:
+                label = f"{prio}. {label}"
             self._assigned_by_label[label] = project
         return list(self._assigned_by_label)
 
     def _apply_assigned_project(self, project):
         self.client_var.set(project["client"])
         self.version_var.set(project["version"])
-        self._update_priority_label(project)
         self.controller.update_context(
             client=project["client"],
             project=project["video_name"],
             version=project["version"],
         )
         self.worker.wake()
-
-    def _update_priority_label(self, project):
-        """Affiche « ★ Priorité n°X » si le projet a ete priorise (sinon rien)."""
-        if not hasattr(self, "priority_var"):
-            return
-        prio = (project or {}).get("priority", 0) or 0
-        self.priority_var.set(f"★ Priorité n°{prio}" if prio > 0 else "")
 
     def _on_assigned_video_selected(self, _event=None):
         project = self._assigned_by_label.get(self.video_var.get())
@@ -352,8 +363,10 @@ class AppWindow:
         if not name:
             messagebox.showwarning("Nom requis", "Renseigne le nom du collaborateur.")
             return
-        save_config({"employee_name": name})
+        role = self.settings_role_var.get().strip()
+        save_config({"employee_name": name, "employee_role": role})
         self.cfg["employee_name"] = name
+        self.cfg["employee_role"] = role
         # Identite = nom@PC : changer le nom bascule l'agent sur l'identite du
         # nouvel utilisateur (les donnees de l'ancien restent sous son nom).
         self.cfg["employee_id"] = derive_employee_id(name)
@@ -371,6 +384,10 @@ class AppWindow:
                 register_employee(self.cfg)
             except Exception as exc:
                 log(f"Enregistrement non envoye: {exc}")
+            try:
+                set_role(self.cfg, self.cfg.get("employee_role") or None)
+            except Exception as exc:
+                log(f"Role non envoye: {exc}")
             if self.assigned_projects is not None:
                 try:
                     self._pending_assigned = fetch_assigned_projects(self.cfg)
@@ -550,8 +567,9 @@ class AppWindow:
             msg, self._pending_error = self._pending_error, None
             messagebox.showerror("Erreur", msg)
 
+        update_ready = is_update_ready()
         # Nouvelle version telechargee -> on propose le redemarrage (une fois).
-        if not self._update_notified and is_update_ready():
+        if update_ready and not self._update_notified:
             self._update_notified = True
             self._notif.show(
                 "Une nouvelle version est prête.",
@@ -565,13 +583,27 @@ class AppWindow:
 
         assigned = self._selected_assigned_project()
         estimated = assigned.get("estimated_duration_sec", 0) if assigned else 0
-        self._floating.update(mode, seconds, estimated)
+        # Rappel de MAJ dans le timer flottant (toujours visible) : sous le
+        # compteur en Play/Pause, a la place du compteur a l'arret.
+        self._floating.update(mode, seconds, estimated, update_ready=update_ready)
 
         running = mode == SessionMode.RUNNING
         stopped = mode == SessionMode.STOPPED
         self.play_btn.state(["disabled"] if running else ["!disabled"])
         self.pause_btn.state(["!disabled"] if running else ["disabled"])
         self.stop_btn.state(["disabled"] if stopped else ["!disabled"])
+
+        # Auto-application de la MAJ quand l'agent reste a l'arret un moment :
+        # les postes "juste ouverts" se mettent a jour seuls ; ceux qui
+        # travaillent (Play/Pause) ne sont jamais coupes (ils ont le rappel).
+        if update_ready and stopped:
+            if self._update_idle_since is None:
+                self._update_idle_since = time.monotonic()
+            elif time.monotonic() - self._update_idle_since >= self._auto_update_idle_sec:
+                self._restart_for_update()
+                return
+        else:
+            self._update_idle_since = None
 
         self.root.after(1000, self._refresh)
 

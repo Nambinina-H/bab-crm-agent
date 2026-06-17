@@ -24,6 +24,10 @@ venv/
 build/
 dist/
 
+# Scripts temporaires de redemarrage/MAJ (auto-supprimes)
+_restart_agent.bat
+_apply_update.bat
+
 # Outils / OS
 .ruff_cache/
 .vscode/

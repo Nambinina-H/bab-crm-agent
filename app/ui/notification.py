@@ -23,11 +23,6 @@ class NotificationBar:
             wraplength=230, justify="left", anchor="w",
         )
         self._label.pack(side="left", padx=(10, 6), pady=6)
-        tk.Button(
-            bar, text="✕", bd=0, relief="flat", bg=_BG, fg="white",
-            activebackground=_BG, activeforeground="white",
-            cursor="hand2", command=self.hide,
-        ).pack(side="right", padx=(0, 8))
         self._btn = tk.Button(
             bar, text="", bd=0, relief="flat", bg="white", fg=_BG,
             activebackground="#e5e7eb", font=("Segoe UI", 9, "bold"),
@@ -43,7 +38,7 @@ class NotificationBar:
         self._action_cb = action_cb
         if action_text and action_cb:
             self._btn.config(text=action_text)
-            self._btn.pack(side="right", padx=(0, 4), pady=4)
+            self._btn.pack(side="right", padx=(0, 8), pady=4)
         else:
             self._btn.pack_forget()
         self._bar.pack(side="top", fill="x", before=self._before)

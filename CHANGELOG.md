@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.0.9
+**Added**
+- **Rappel de mise à jour bien visible** dans le timer flottant (toujours au-dessus
+  de l'écran) : en **Play/Pause**, le compteur reste et le rappel s'affiche
+  **dessous** ; **à l'arrêt**, le rappel **remplace** le compteur. **Cliquer** le
+  rappel **redémarre** l'app pour appliquer la MAJ.
+- **Auto-application de la MAJ à l'arrêt** : si une mise à jour est prête et que
+  l'agent reste **à l'arrêt** quelques minutes, il se met à jour **tout seul**
+  (les postes « juste ouverts » n'ont plus besoin d'action). Un agent en
+  **Play/Pause n'est jamais coupé** (il voit seulement le rappel).
+- **Rôle dans Paramètres** : un menu déroulant **Rôle** (sous Nom) lié au champ
+  rôle de la plateforme (page Collaborateurs) ; il affiche le rôle courant et le
+  met à jour côté serveur à l'enregistrement. Rôles ajoutés : **Informaticien**,
+  **IA**.
+- **Numéros de priorité dans la liste des projets** : la liste déroulante affiche
+  « 1. … », « 2. … » selon l'ordre défini par le manager (le n°1 reste
+  pré-sélectionné à l'ouverture).
+
+**Fixed**
+- **Bouton « Redémarrer »** : le redémarrage est désormais **fiable** (relanceur
+  qui attend la fin du process — compatible avec le verrou mono-instance) et
+  fonctionne **aussi en développement** (relance `python -m app.main`).
+
+**Interne**
+- `AGENT_FAKE_UPDATE=1` : force « mise à jour prête » en local pour **tester** le
+  bandeau / le rappel / le redémarrage sans build.
+
 ## 1.0.8
 **Changed**
 - **Identité par personne (nom@PC)** : l'identité d'un collaborateur est désormais

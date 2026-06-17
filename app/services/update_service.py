@@ -22,6 +22,7 @@ import time
 import requests
 
 from app.core.logging import log
+from app.settings.paths import BASE_DIR
 from app.version import __version__
 
 # Depot public ou sont publiees les Releases (le .exe en asset).
@@ -92,11 +93,63 @@ def apply_pending_update():
 
 def is_update_ready() -> bool:
     """Vrai si une nouvelle version a ete telechargee et attend l'installation
-    (au prochain redemarrage). Sert a notifier l'utilisateur dans l'UI."""
+    (au prochain redemarrage). Sert a notifier l'utilisateur dans l'UI.
+
+    `AGENT_FAKE_UPDATE=1` force le vrai en developpement : permet de tester le
+    bandeau + le rappel du timer flottant sans build."""
+    if os.environ.get("AGENT_FAKE_UPDATE"):
+        return True
     if not _is_frozen():
         return False
     _, _, staged = _paths()
     return os.path.exists(staged) and os.path.getsize(staged) >= _MIN_EXE_SIZE
+
+
+def restart_for_update():
+    """Relance l'agent en appliquant la MAJ telechargee si presente.
+
+    Robuste et compatible avec le verrou mono-instance : un petit relanceur
+    attend la **fin du process courant** (par PID) avant de redemarrer, sinon la
+    nouvelle instance se heurterait au verrou. Marche aussi en developpement
+    (relance `python -m app.main`) pour pouvoir tester le redemarrage.
+    """
+    pid = os.getpid()
+    exe, _folder, staged = _paths()
+    has_update = (
+        _is_frozen()
+        and os.path.exists(staged)
+        and os.path.getsize(staged) >= _MIN_EXE_SIZE
+        and _is_valid_exe(staged)
+    )
+    try:
+        if _is_frozen():
+            exe_name = os.path.basename(exe)
+            swap = (
+                f'move /Y "{_STAGED_NAME}" "{exe_name}" >nul\r\n' if has_update else ""
+            )
+            launch = f'start "" "{exe_name}"\r\n'
+        else:
+            swap = ""  # dev : rien a remplacer, on relance juste le module
+            launch = f'start "" "{sys.executable}" -m app.main\r\n'
+        bat = os.path.join(BASE_DIR, "_restart_agent.bat")
+        with open(bat, "w", encoding="utf-8") as f:
+            f.write(
+                "@echo off\r\n"
+                ":wait\r\n"
+                f'tasklist /FI "PID eq {pid}" | find "{pid}" >nul '
+                "&& (ping 127.0.0.1 -n 2 >nul & goto wait)\r\n"
+                + swap
+                + launch
+                + 'del "%~f0"\r\n'  # le script se supprime
+            )
+        log("Redemarrage de l'agent (application de la mise a jour)...")
+        subprocess.Popen(
+            ["cmd", "/c", bat], cwd=BASE_DIR, creationflags=0x08000000
+        )
+    except Exception as exc:
+        log(f"Redemarrage impossible: {exc}")
+        return
+    os._exit(0)  # libere le verrou : le relanceur attend cette sortie puis relance
 
 
 def check_and_download():

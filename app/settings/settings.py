@@ -27,6 +27,7 @@ DEFAULT_CONFIG = {
     "api_key": _BUILD_API_KEY or "CHANGE_ME",
     "employee_id": f"{getpass.getuser()}@{socket.gethostname()}",
     "employee_name": "",  # saisi via l'ecran Configuration de l'app
+    "employee_role": "",  # role metier (saisi dans Parametres ; sync serveur)
     "sample_interval_sec": 5,
     "idle_threshold_sec": 120,
     "sync_interval_sec": 60,
@@ -36,7 +37,7 @@ DEFAULT_CONFIG = {
 # Cles ecrites dans config.json (les secrets api_key/server_url restent dans
 # .env ; employee_id est derive du nom au runtime).
 _PERSISTED_KEYS = (
-    "employee_name", "sample_interval_sec", "idle_threshold_sec",
+    "employee_name", "employee_role", "sample_interval_sec", "idle_threshold_sec",
     "sync_interval_sec", "sync_batch_size",
 )
 

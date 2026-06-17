@@ -33,7 +33,10 @@ class Syncer(threading.Thread):
             #    et assignable sans attendre d'activite). Idempotent.
             if self.cfg.get("employee_name"):
                 try:
-                    register_employee(self.cfg)
+                    info = register_employee(self.cfg)
+                    # Role courant cote serveur -> affiche dans Parametres.
+                    if isinstance(info, dict) and "role" in info:
+                        self.cfg["employee_role"] = info.get("role") or ""
                     online = True
                 except Exception as exc:
                     log(f"Enregistrement non envoye: {exc}")

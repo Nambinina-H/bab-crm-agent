@@ -21,6 +21,17 @@ FLOAT_FONT = ("Segoe UI", FLOAT_SIZE, "bold")
 VERSIONS = [f"V{i}" for i in range(1, 11)]
 VERSION_RE = re.compile(r"^[Vv]\d+$")  # V suivi de chiffres : V1, V2, V12...
 
+# Roles metiers proposes dans l'agent (memes valeurs que la page Collaborateurs).
+EMPLOYEE_ROLES = [
+    "Monteur",
+    "Manager",
+    "Admin",
+    "Générateur d'images",
+    "Scénariste",
+    "Informaticien",
+    "IA",
+]
+
 
 def fmt(seconds):
     """Secondes -> 'HH:MM:SS'."""
