@@ -14,20 +14,42 @@ from app.services.assigned_projects_service import (
     fetch_assigned_projects,
 )
 from app.services.register_service import register_employee, set_role
-from app.services import storage_service
+from app.services import autostart_service, storage_service
 from app.services.update_service import is_update_ready, restart_for_update
 from app.settings.paths import LOGO_PNG
 from app.settings.settings import derive_employee_id, save_config
 from app.ui.floating_timer import FloatingTimer
 from app.ui.notification import NotificationBar
-from app.ui.theme import EMPLOYEE_ROLES, STATUS, VERSIONS, VERSION_RE
+from app.ui.theme import (
+    ACCENT,
+    ACCENT_HOVER,
+    BORDER_SOFT,
+    CARD,
+    DISABLED,
+    EMPLOYEE_ROLES,
+    FONT,
+    GREEN,
+    NAVY,
+    ORANGE,
+    RED,
+    SOFT_BG,
+    SOFT_TEXT,
+    STATE_COLORS,
+    STATUS,
+    TEXT,
+    TEXT_MUTED,
+    VERSIONS,
+    VERSION_RE,
+    paint_control,
+    setup_style,
+)
 from app.version import __version__
 
 
 class AppWindow:
     """Fenetre de controle (thread principal) — ORCHESTRATEUR.
 
-    Assemble les pages (Accueil / Parametres), le bandeau de notification et le
+    Assemble les pages (Accueil / Profil), le bandeau de notification et le
     timer flottant (composants `ui/`), cable les actions vers le `controller` /
     les services, et tient la boucle de rafraichissement (1 s). Aucune logique
     reseau/DB ici : tout passe par le controller et les services.
@@ -62,19 +84,25 @@ class AppWindow:
 
         self.root = tk.Tk()
         self.root.title("BABCRM - agent")
-        self.root.geometry("380x500")
+        self.root.geometry("380x520")
         self.root.resizable(False, False)  # taille fixe
         self.root.protocol("WM_DELETE_WINDOW", self._handle_close)
 
+        setup_style(self.root)  # theme plat (clam + palette teal/navy)
         self._set_window_icon()
         self._remove_maximize_button()
-        self._build_menu()
+
+        # Onglets + fin separateur, puis le corps (les pages) plein cadre.
+        self._build_tabs(self.root)
+        tk.Frame(self.root, bg=BORDER_SOFT, height=1).pack(fill="x")
+
         # Corps : les pages vivent ici ; le bandeau de notif s'insere au-dessus.
-        self._body = ttk.Frame(self.root)
+        self._body = tk.Frame(self.root, bg=CARD)
         self._body.pack(fill="both", expand=True)
         self._notif = NotificationBar(self.root, before=self._body)
         self._build_main_page()
         self._build_settings_page()
+        self._build_params_page()
         self._floating = FloatingTimer(self.root, on_restart=self._restart_for_update)
 
         self._update_who()
@@ -87,13 +115,39 @@ class AppWindow:
         else:
             self._show_main()
 
-    # --- barre de menu ---
+    # --- onglets (Accueil / Profil) ---
 
-    def _build_menu(self):
-        menubar = tk.Menu(self.root)
-        menubar.add_command(label="Accueil", command=self._show_main)
-        menubar.add_command(label="Paramètres", command=self._show_settings)
-        self.root.config(menu=menubar)
+    def _build_tabs(self, parent):
+        bar = tk.Frame(parent, bg=CARD)
+        bar.pack(fill="x", padx=18, pady=(12, 0))
+        self._tabs = {}
+        specs = [("main", "Accueil", self._goto_main),
+                 ("settings", "Profil", self._show_settings),
+                 ("params", "Paramètres", self._show_params)]
+        for key, label, cmd in specs:
+            holder = tk.Frame(bar, bg=CARD)
+            holder.pack(side="left", padx=(0, 20))
+            lbl = tk.Label(holder, text=label, bg=CARD, fg=TEXT_MUTED,
+                           font=(FONT, 10, "bold"), cursor="hand2")
+            lbl.pack()
+            underline = tk.Frame(holder, bg=CARD, height=2)
+            underline.pack(fill="x", pady=(5, 0))
+            lbl.bind("<Button-1>", lambda _e, c=cmd: c())
+            self._tabs[key] = (lbl, underline)
+
+    def _set_active_tab(self, key):
+        for k, (lbl, underline) in self._tabs.items():
+            on = k == key
+            lbl.config(fg=NAVY if on else TEXT_MUTED)
+            underline.config(bg=ACCENT if on else CARD)
+
+    def _goto_main(self):
+        """Onglet Accueil : exige un nom (comme l'ancien garde de la fleche)."""
+        if not self.cfg.get("employee_name"):
+            messagebox.showwarning("Nom requis",
+                                   "Renseigne ton nom avant de continuer.")
+            return
+        self._show_main()
 
     def _restart_for_update(self):
         """Applique la mise a jour (si telechargee) et relance l'agent : ferme
@@ -107,32 +161,46 @@ class AppWindow:
 
     # --- pages ---
 
-    def _show_main(self):
+    def _hide_pages(self):
+        self.main_frame.pack_forget()
         self.settings_frame.pack_forget()
+        self.params_frame.pack_forget()
+
+    def _show_main(self):
+        self._hide_pages()
         self._refresh_video_values()
+        self._set_active_tab("main")
         self.main_frame.pack(fill="both", expand=True)
 
     def _show_settings(self):
-        self.main_frame.pack_forget()
+        self._hide_pages()
         self.settings_name_var.set(self.cfg.get("employee_name", ""))
         self.settings_role_var.set(self.cfg.get("employee_role", ""))
+        self._set_active_tab("settings")
         self.settings_frame.pack(fill="both", expand=True)
+
+    def _show_params(self):
+        self._hide_pages()
+        # Reflete l'etat reel du demarrage automatique (registre).
+        self.autostart_var.set(autostart_service.is_enabled())
+        self._set_active_tab("params")
+        self.params_frame.pack(fill="both", expand=True)
 
     def _build_main_page(self):
         f = ttk.Frame(self._body)
         self.main_frame = f
 
         if self._logo_img is not None:
-            tk.Label(f, image=self._logo_img).pack(pady=(10, 0))
+            tk.Label(f, image=self._logo_img, bg=CARD).pack(pady=(14, 4))
 
         self.who_var = tk.StringVar()
-        ttk.Label(f, textvariable=self.who_var).pack(pady=(6, 0))
+        ttk.Label(f, textvariable=self.who_var, style="Who.TLabel").pack(pady=(2, 0))
 
         if self.assigned_projects is not None:
             self.client_var = self._field(f, "Client", readonly=True)
             self.video_var = self._field(
                 f,
-                "Nom de la video",
+                "Projet",
                 combo=True,
                 values=self._assigned_video_values(),
                 readonly=True,
@@ -146,7 +214,7 @@ class AppWindow:
         else:
             self.client_var = self._field(f, "Client")
             self.video_var = self._field(
-                f, "Nom de la video", combo=True,
+                f, "Projet", combo=True,
                 values=storage_service.distinct_videos(),
             )
             self._video_box.bind("<<ComboboxSelected>>", self._on_video_selected)
@@ -162,53 +230,121 @@ class AppWindow:
         # Le chrono n'est plus dans la fenetre : il vit dans le bandeau flottant
         # (haut a droite de l'ecran). On garde juste l'etat ici.
         self.status_var = tk.StringVar(value="Arrete")
-        ttk.Label(f, textvariable=self.status_var,
-                  font=("Segoe UI", 15, "bold")).pack(pady=(14, 6))
+        status_row = tk.Frame(f, bg=CARD)
+        status_row.pack(pady=(14, 6))
+        self._status_dot = tk.Label(
+            status_row, text="●", bg=CARD,
+            fg=STATE_COLORS[SessionMode.STOPPED], font=(FONT, 12))
+        self._status_dot.pack(side="left", padx=(0, 6))
+        self._status_lbl = tk.Label(
+            status_row, textvariable=self.status_var, bg=CARD,
+            fg=NAVY, font=(FONT, 13, "bold"))
+        self._status_lbl.pack(side="left")
 
         btns = ttk.Frame(f)
-        btns.pack(pady=14)
-        self.play_btn = ttk.Button(btns, text="▶ Play", command=self._play)
-        self.pause_btn = ttk.Button(btns, text="⏸ Pause", command=self._pause)
-        self.stop_btn = ttk.Button(btns, text="⏹ Stop", command=self._stop)
-        self.play_btn.grid(row=0, column=0, padx=4)
-        self.pause_btn.grid(row=0, column=1, padx=4)
-        self.stop_btn.grid(row=0, column=2, padx=4)
+        btns.pack(fill="x", padx=14, pady=14)
+        btns.columnconfigure((0, 1, 2), weight=1, uniform="ctrl")
+        _opts = dict(font=("Segoe UI", 10, "bold"), bd=0, relief="flat",
+                     highlightthickness=1, cursor="hand2", pady=7)
+        # Icone Pause dessinee (deux barres serrees) ; couleur selon l'etat.
+        self._pause_imgs = {
+            "white": self._make_pause_icon("#ffffff"),
+            "dark": self._make_pause_icon(TEXT),
+            "gray": self._make_pause_icon(DISABLED),
+        }
+        self.play_btn = tk.Button(btns, text="▶ Play", command=self._play, **_opts)
+        self.pause_btn = tk.Button(
+            btns, text=" Pause", image=self._pause_imgs["dark"],
+            compound="left", command=self._pause, **_opts)
+        self.stop_btn = tk.Button(btns, text="⏹ Stop", command=self._stop, **_opts)
+        self.play_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self.pause_btn.grid(row=0, column=1, sticky="ew", padx=4)
+        self.stop_btn.grid(row=0, column=2, sticky="ew", padx=(4, 0))
 
         # Bouton "Terminé" (mode assigne) : a part des controles du chrono, pour
         # marquer le projet livre (il sort alors de la liste).
         if self.assigned_projects is not None:
-            self.complete_btn = ttk.Button(
+            self.complete_btn = tk.Button(
                 f, text="✓ Marquer ce projet terminé",
                 command=self._complete_project,
+                bg=SOFT_BG, fg=SOFT_TEXT, activebackground=SOFT_BG,
+                activeforeground=SOFT_TEXT, bd=0, relief="flat",
+                highlightthickness=1, highlightbackground="#C9E4E6",
+                font=("Segoe UI", 9, "bold"), cursor="hand2", pady=6,
             )
-            self.complete_btn.pack(pady=(0, 4))
+            self.complete_btn.pack(fill="x", padx=14, pady=(0, 6))
+
+    def _make_pause_icon(self, color, w=14, h=14, bar=3, gap=2):
+        """Petite image : deux barres verticales serrees (icone Pause '||').
+        Couleur pleine `color` ; le reste reste transparent (fond du bouton)."""
+        img = tk.PhotoImage(master=self.root, width=w, height=h)
+        x0 = (w - (bar * 2 + gap)) // 2
+        for bx in (x0, x0 + bar + gap):
+            img.put(color, to=(bx, 1, bx + bar, h - 1))
+        return img
 
     def _build_settings_page(self):
         f = ttk.Frame(self._body)
         self.settings_frame = f
 
-        ttk.Button(f, text="←", width=3, command=self._leave_settings).pack(
-            anchor="w", padx=12, pady=(12, 0))
-        ttk.Label(f, text="Paramètres", font=("Segoe UI", 15, "bold")).pack(
-            pady=(12, 16))
+        ttk.Label(f, text="Profil", style="Title.TLabel").pack(
+            anchor="w", padx=16, pady=(18, 18))
 
-        ttk.Label(f, text="Nom").pack(anchor="w", padx=16, pady=(0, 2))
+        ttk.Label(f, text="Nom", style="Field.TLabel").pack(
+            anchor="w", padx=16, pady=(0, 2))
         self.settings_name_var = tk.StringVar(value=self.cfg.get("employee_name", ""))
         entry = ttk.Entry(f, textvariable=self.settings_name_var)
         entry.pack(fill="x", padx=16)
         entry.bind("<Return>", lambda _e: self._save_settings())
 
         # Role metier : lie au champ role cote plateforme (page Collaborateurs).
-        ttk.Label(f, text="Rôle").pack(anchor="w", padx=16, pady=(10, 2))
+        ttk.Label(f, text="Rôle", style="Field.TLabel").pack(
+            anchor="w", padx=16, pady=(10, 2))
         self.settings_role_var = tk.StringVar(value=self.cfg.get("employee_role", ""))
         ttk.Combobox(
             f, textvariable=self.settings_role_var,
             values=EMPLOYEE_ROLES, state="readonly",
         ).pack(fill="x", padx=16)
 
-        ttk.Button(f, text="Enregistrer", command=self._save_settings).pack(pady=18)
+        self._build_save_footer(f, self._save_settings)
 
-        ttk.Label(f, text=f"Version {__version__}").pack(side="bottom", pady=10)
+    def _build_params_page(self):
+        f = ttk.Frame(self._body)
+        self.params_frame = f
+
+        ttk.Label(f, text="Paramètres", style="Title.TLabel").pack(
+            anchor="w", padx=16, pady=(18, 18))
+
+        self.autostart_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            f, text="Redémarrage automatique",
+            variable=self.autostart_var,
+        ).pack(anchor="w", padx=16, pady=(0, 2))
+
+        self._build_save_footer(f, self._save_params)
+
+    def _build_save_footer(self, parent, command):
+        """Bloc bas commun (bouton Enregistrer + 'Version x.y.z'), ancre en bas
+        pour que toutes les pages aient leur Enregistrer au MEME niveau."""
+        footer = ttk.Frame(parent)
+        footer.pack(side="bottom", fill="x")
+        tk.Button(
+            footer, text="Enregistrer", command=command,
+            bg=ACCENT, fg="#ffffff", activebackground=ACCENT_HOVER,
+            activeforeground="#ffffff", bd=0, relief="flat",
+            font=("Segoe UI", 10, "bold"), cursor="hand2", pady=7,
+        ).pack(fill="x", padx=16)
+        ttk.Label(footer, text=f"Version {__version__}",
+                  style="Who.TLabel").pack(pady=(8, 12))
+
+    def _save_params(self):
+        try:
+            autostart_service.set_enabled(self.autostart_var.get())
+        except Exception as exc:
+            log(f"Reglage demarrage auto echoue: {exc}")
+            messagebox.showerror("Erreur", "Impossible d'enregistrer le réglage.")
+            return
+        messagebox.showinfo("Enregistré", "Réglages enregistrés.")
 
     # --- construction d'un champ ---
 
@@ -222,7 +358,7 @@ class AppWindow:
         else:
             widget = ttk.Entry(parent, textvariable=var, state=state)
         widget.pack(fill="x", padx=14)
-        if label == "Nom de la video":
+        if label == "Projet":
             self._video_box = widget
         return var
 
@@ -396,13 +532,6 @@ class AppWindow:
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _leave_settings(self):
-        if not self.cfg.get("employee_name"):
-            messagebox.showwarning("Nom requis",
-                                   "Renseigne ton nom avant de continuer.")
-            return
-        self._show_main()
-
     # --- selection / contexte ---
 
     def _refresh_video_values(self):
@@ -468,7 +597,7 @@ class AppWindow:
         if not self.cfg.get("employee_name"):
             messagebox.showwarning(
                 "Configuration requise",
-                "Renseigne ton nom dans Paramètres avant de demarrer.",
+                "Renseigne ton nom dans Profil avant de demarrer.",
             )
             self._show_settings()
             return
@@ -588,10 +717,17 @@ class AppWindow:
         self._floating.update(mode, seconds, estimated, update_ready=update_ready)
 
         running = mode == SessionMode.RUNNING
+        paused = mode == SessionMode.PAUSED
         stopped = mode == SessionMode.STOPPED
-        self.play_btn.state(["disabled"] if running else ["!disabled"])
-        self.pause_btn.state(["!disabled"] if running else ["disabled"])
-        self.stop_btn.state(["disabled"] if stopped else ["!disabled"])
+        self._status_dot.config(fg=STATE_COLORS[mode])
+        self._status_lbl.config(fg=STATE_COLORS[mode])
+        # Seul le bouton de l'etat courant est rempli (Play vert / Pause orange) ;
+        # Stop reste neutre (blanc), comme la maquette.
+        paint_control(self.play_btn, GREEN, active=running, enabled=not running)
+        paint_control(self.pause_btn, ORANGE, active=paused, enabled=running)
+        self.pause_btn.config(image=self._pause_imgs[
+            "white" if paused else "dark" if running else "gray"])
+        paint_control(self.stop_btn, RED, active=False, enabled=not stopped)
 
         # Auto-application de la MAJ quand l'agent reste a l'arret un moment :
         # les postes "juste ouverts" se mettent a jour seuls ; ceux qui

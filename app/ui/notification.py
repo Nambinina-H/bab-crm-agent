@@ -6,7 +6,9 @@ proposer le redemarrage quand une nouvelle version est telechargee.
 """
 import tkinter as tk
 
-_BG = "#1d4ed8"
+from app.ui.theme import ACCENT, ACCENT_HOVER, NAVY
+
+_BG = NAVY
 
 
 class NotificationBar:
@@ -24,10 +26,11 @@ class NotificationBar:
         )
         self._label.pack(side="left", padx=(10, 6), pady=6)
         self._btn = tk.Button(
-            bar, text="", bd=0, relief="flat", bg="white", fg=_BG,
-            activebackground="#e5e7eb", font=("Segoe UI", 9, "bold"),
-            cursor="hand2", padx=8, command=self._on_action,
-        )  # affiche seulement s'il y a une action
+            bar, text="", bd=0, relief="flat", bg=ACCENT, fg="white",
+            activebackground=ACCENT_HOVER, activeforeground="white",
+            font=("Segoe UI", 9, "bold"), cursor="hand2", padx=10, pady=3,
+            command=self._on_action,
+        )  # affiche seulement s'il y a une action (teal)
 
     def _on_action(self):
         if self._action_cb:

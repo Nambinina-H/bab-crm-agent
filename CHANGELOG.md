@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.0
+**Changed**
+- **Refonte de l'interface** (style plat teal/navy, sans coins arrondis) : la
+  navigation passe par des **onglets** en haut (**Accueil / Profil / Paramètres**)
+  au lieu du menu ; statut avec **pastille + texte colorés** selon l'état ;
+  boutons **Play / Pause / Stop** de largeur égale, celui de l'état courant
+  **rempli** de sa couleur (Play vert / Pause orange) ; champs en lecture seule
+  sur fond gris. **Aucun changement de comportement.**
+- Champ **« Projet »** (ex-« Nom de la vidéo »).
+- Bouton **Pause** : icône dessinée (deux barres serrées) au lieu d'un glyphe de
+  police (rendu net et stable).
+
+**Added**
+- **Démarrage automatique** (onglet **Paramètres**) : une case à cocher
+  « Redémarrage automatique » qui ouvre l'agent **à l'ouverture de session
+  Windows** (clé `HKCU\\…\\Run`, sans droits admin). Utile après une coupure de
+  courant ou un redémarrage. Réglage par utilisateur, activable/désactivable.
+- Rôle **« Stagiaire »** ajouté à la liste des rôles.
+
 ## 1.0.9
 **Added**
 - **Rappel de mise à jour bien visible** dans le timer flottant (toujours au-dessus

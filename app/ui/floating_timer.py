@@ -16,12 +16,14 @@ import tkinter as tk
 from app.core.session import SessionMode
 from app.ui.theme import (
     FLOAT_FONT,
+    NAVY,
     STATE_COLORS,
     STATUS,
     fmt,
 )
 
-_BG = "#111827"
+_BG = NAVY             # navy de la palette
+_BORDER = "#1B3A52"    # bordure navy plus claire
 _NUDGE_FG = "#fbbf24"  # ambre : attire l'oeil sans alarmer
 
 
@@ -39,7 +41,7 @@ class FloatingTimer:
             pass
 
         outer = tk.Frame(win, bg=_BG, padx=12, pady=7, highlightthickness=1,
-                         highlightbackground="#374151")
+                         highlightbackground=_BORDER)
         outer.pack()
         row = tk.Frame(outer, bg=_BG)
         row.pack(fill="x")
